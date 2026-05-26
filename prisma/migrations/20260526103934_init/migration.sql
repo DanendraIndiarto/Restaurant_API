@@ -1,10 +1,12 @@
 -- CreateTable
-CREATE TABLE `Admin` (
+CREATE TABLE `User` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `username` VARCHAR(191) NOT NULL,
     `password` VARCHAR(191) NOT NULL,
+    `role` ENUM('ADMIN', 'CASHIER') NOT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
-    UNIQUE INDEX `Admin_username_key`(`username`),
+    UNIQUE INDEX `User_username_key`(`username`),
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -12,6 +14,7 @@ CREATE TABLE `Admin` (
 CREATE TABLE `Category` (
     `id` INTEGER NOT NULL AUTO_INCREMENT,
     `name` VARCHAR(191) NOT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -24,6 +27,7 @@ CREATE TABLE `Menu` (
     `image` VARCHAR(191) NULL,
     `description` VARCHAR(191) NULL,
     `categoryId` INTEGER NOT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
     PRIMARY KEY (`id`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -34,7 +38,7 @@ CREATE TABLE `Order` (
     `customerName` VARCHAR(191) NOT NULL,
     `tableNumber` VARCHAR(191) NOT NULL,
     `total` INTEGER NOT NULL,
-    `status` VARCHAR(191) NOT NULL DEFAULT 'pending',
+    `status` ENUM('PENDING', 'PROCESS', 'DONE', 'CANCEL') NOT NULL DEFAULT 'PENDING',
     `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
     PRIMARY KEY (`id`)
