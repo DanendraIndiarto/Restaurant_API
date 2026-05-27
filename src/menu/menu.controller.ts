@@ -31,10 +31,19 @@ import { Roles } from 'src/auth/decorator/roles.decorator';
 export class MenuController {
   constructor(private readonly menuService: MenuService) {}
 
-  // PUBLIC
+  // PUBLIC: hanya menu aktif
   @Get()
   findAll() {
     return this.menuService.findAll();
+  }
+
+  // ADMIN: semua menu (termasuk nonaktif)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Get('admin/all')
+  findAllForAdmin() {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call
+    return this.menuService.findAllForAdmin();
   }
 
   // PUBLIC
@@ -51,10 +60,8 @@ export class MenuController {
     FileInterceptor('image', {
       storage: diskStorage({
         destination: './uploads',
-
         filename: (req, file, callback) => {
           const uniqueName = Date.now() + extname(file.originalname);
-
           callback(null, uniqueName);
         },
       }),
@@ -62,13 +69,11 @@ export class MenuController {
   )
   create(
     @Body() dto: CreateMenuDto,
-
     @UploadedFile() file: Express.Multer.File,
   ) {
     if (file) {
       dto.image = file.filename;
     }
-
     return this.menuService.create(dto);
   }
 
@@ -80,10 +85,8 @@ export class MenuController {
     FileInterceptor('image', {
       storage: diskStorage({
         destination: './uploads',
-
         filename: (req, file, callback) => {
           const uniqueName = Date.now() + extname(file.originalname);
-
           callback(null, uniqueName);
         },
       }),
@@ -91,24 +94,29 @@ export class MenuController {
   )
   update(
     @Param('id', ParseIntPipe) id: number,
-
     @Body() dto: UpdateMenuDto,
-
     @UploadedFile() file: Express.Multer.File,
   ) {
     if (file) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       dto.image = file.filename;
     }
-
     return this.menuService.update(id, dto);
   }
 
-  // ADMIN ONLY
+  // ADMIN ONLY - SOFT DELETE
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.menuService.remove(id);
+  }
+
+  // ADMIN ONLY - RESTORE MENU
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Patch(':id/restore')
+  restore(@Param('id', ParseIntPipe) id: number) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call
+    return this.menuService.restore(id);
   }
 }
