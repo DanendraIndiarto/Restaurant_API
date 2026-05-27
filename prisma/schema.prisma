@@ -31,7 +31,6 @@ model Menu {
   description String?
   categoryId  Int
   createdAt   DateTime @default(now())
-  isActive    Boolean  @default(true)
 
   category Category @relation(fields: [categoryId], references: [id])
   orderItems OrderItem[]
