@@ -142,11 +142,15 @@ export class OrderService {
 
   // REPORT
   async report(type: string) {
-    const now = new Date();
+    // 1. Ambil waktu sekarang di zona waktu Asia/Jakarta
+    const tz = 'Asia/Jakarta';
+    const nowString = new Date().toLocaleString('en-US', { timeZone: tz });
+    const now = new Date(nowString);
 
-    const startDate = new Date();
+    const startDate = new Date(nowString);
 
     if (type === 'daily') {
+      // Set ke jam 00:00:00 waktu lokal Waktu Indonesia Barat
       startDate.setHours(0, 0, 0, 0);
     } else if (type === 'weekly') {
       startDate.setDate(now.getDate() - 7);
@@ -158,10 +162,16 @@ export class OrderService {
       throw new NotFoundException('Tipe report tidak valid');
     }
 
+    // Konversi balik startDate lokal ke bentuk UTC Object sebelum dikirim ke query Prisma
+    const offset =
+      new Date().getTime() -
+      new Date(new Date().toLocaleString('en-US', { timeZone: tz })).getTime();
+    const targetUtcDate = new Date(startDate.getTime() + offset);
+
     const orders = await this.prisma.order.findMany({
       where: {
         createdAt: {
-          gte: startDate,
+          gte: targetUtcDate,
         },
       },
       include: {
@@ -190,9 +200,11 @@ export class OrderService {
       total: order.total,
       status: order.status,
 
-      date: order.createdAt.toLocaleDateString('id-ID'),
-
-      time: order.createdAt.toLocaleTimeString('id-ID'),
+      // 2. Memaksa format output string mengikuti zona waktu Asia/Jakarta secara spesifik
+      date: order.createdAt.toLocaleDateString('id-ID', { timeZone: tz }),
+      time: order.createdAt
+        .toLocaleTimeString('id-ID', { timeZone: tz })
+        .replace(/\./g, ':'), // Mengubah format 12.21.24 menjadi 12:21:24 jika dibutuhkan
 
       items: order.orderItems.map((item) => ({
         menu: item.menu.name,
