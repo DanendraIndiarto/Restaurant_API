@@ -13,7 +13,7 @@ async function bootstrap() {
 
   // --- TAMBAHKAN BARIS INI ---
   // Ini gunanya agar folder 'uploads' bisa diakses lewat URL /uploads
-  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+  app.useStaticAssets(join(process.cwd(), 'uploads'), {
     prefix: '/uploads/',
   });
   // ---------------------------
