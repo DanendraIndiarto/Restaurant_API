@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
@@ -53,6 +54,24 @@ export class OrderController {
     @Body() dto: UpdateOrderStatusDto,
   ) {
     return this.orderService.updateStatus(id, dto.status);
+  }
+
+  // ADMIN ONLY - HAPUS ORDER
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Delete(':id')
+  remove(@Param('id', ParseIntPipe) id: number) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call
+    return this.orderService.remove(id);
+  }
+
+  // ADMIN ONLY - HAPUS SEMUA ORDER
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  @Delete('all/clear')
+  removeAll() {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call
+    return this.orderService.removeAll();
   }
 
   // HISTORY PEMBELIAN

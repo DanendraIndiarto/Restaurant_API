@@ -104,6 +104,36 @@ export class OrderService {
     });
   }
 
+  // HAPUS ORDER BY ID
+  async remove(id: number) {
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order tidak ditemukan');
+    }
+
+    // Hapus order items dulu
+    await this.prisma.orderItem.deleteMany({
+      where: { orderId: id },
+    });
+
+    // Hapus order
+    return this.prisma.order.delete({
+      where: { id },
+    });
+  }
+
+  // HAPUS SEMUA ORDER
+  async removeAll() {
+    // Hapus semua order items dulu
+    await this.prisma.orderItem.deleteMany();
+
+    // Hapus semua order
+    return this.prisma.order.deleteMany();
+  }
+
   // HISTORY PEMBELIAN
   async history() {
     return this.prisma.order.findMany({
