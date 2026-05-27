@@ -31,19 +31,10 @@ import { Roles } from 'src/auth/decorator/roles.decorator';
 export class MenuController {
   constructor(private readonly menuService: MenuService) {}
 
-  // PUBLIC: hanya menu aktif
+  // PUBLIC: semua menu
   @Get()
   findAll() {
     return this.menuService.findAll();
-  }
-
-  // ADMIN: semua menu (termasuk nonaktif)
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
-  @Get('admin/all')
-  findAllForAdmin() {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call
-    return this.menuService.findAllForAdmin();
   }
 
   // PUBLIC
@@ -103,20 +94,11 @@ export class MenuController {
     return this.menuService.update(id, dto);
   }
 
-  // ADMIN ONLY - SOFT DELETE
+  // ADMIN ONLY
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.menuService.remove(id);
-  }
-
-  // ADMIN ONLY - RESTORE MENU
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
-  @Patch(':id/restore')
-  restore(@Param('id', ParseIntPipe) id: number) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call
-    return this.menuService.restore(id);
   }
 }

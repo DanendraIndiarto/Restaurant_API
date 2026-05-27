@@ -7,18 +7,8 @@ import { UpdateMenuDto } from './dto/update-menu.dto';
 export class MenuService {
   constructor(private prisma: PrismaService) {}
 
-  // PUBLIC: hanya menu yang aktif
+  // PUBLIC: semua menu
   async findAll() {
-    return this.prisma.menu.findMany({
-      where: { isActive: true },
-      include: {
-        category: true,
-      },
-    });
-  }
-
-  // ADMIN: semua menu (termasuk yang nonaktif)
-  async findAllForAdmin() {
     return this.prisma.menu.findMany({
       include: {
         category: true,
@@ -43,10 +33,7 @@ export class MenuService {
 
   async create(dto: CreateMenuDto) {
     return this.prisma.menu.create({
-      data: {
-        ...dto,
-        isActive: true, // menu baru langsung aktif
-      },
+      data: dto,
       include: {
         category: true,
       },
@@ -71,7 +58,7 @@ export class MenuService {
     });
   }
 
-  // SOFT DELETE: hanya nonaktifkan
+  // HARD DELETE: hapus permanen
   async remove(id: number) {
     const menu = await this.prisma.menu.findUnique({
       where: { id },
@@ -81,25 +68,8 @@ export class MenuService {
       throw new NotFoundException('Menu tidak ditemukan');
     }
 
-    return this.prisma.menu.update({
+    return this.prisma.menu.delete({
       where: { id },
-      data: { isActive: false },
-    });
-  }
-
-  // RESTORE: mengaktifkan kembali
-  async restore(id: number) {
-    const menu = await this.prisma.menu.findUnique({
-      where: { id },
-    });
-
-    if (!menu) {
-      throw new NotFoundException('Menu tidak ditemukan');
-    }
-
-    return this.prisma.menu.update({
-      where: { id },
-      data: { isActive: true },
     });
   }
 }
