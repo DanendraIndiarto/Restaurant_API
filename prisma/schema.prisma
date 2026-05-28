@@ -26,15 +26,15 @@ model Category {
 }
 
 model Menu {
-  id          Int      @id @default(autoincrement())
+  id          Int         @id @default(autoincrement())
   name        String
   price       Int
-  image       String?
+  image       String?     @db.LongText
   description String?
   categoryId  Int
-  createdAt   DateTime @default(now())
+  createdAt   DateTime    @default(now())
 
-  category Category @relation(fields: [categoryId], references: [id])
+  category   Category    @relation(fields: [categoryId], references: [id])
   orderItems OrderItem[]
 }
 

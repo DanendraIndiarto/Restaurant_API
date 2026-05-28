@@ -33,6 +33,9 @@ export class OrderService {
         paymentStatus?: PaymentStatus;
         items?: Array<{ menuId: number; qty: number; subtotal: number }>;
       };
+      if (!orderData.total) {
+        throw new BadRequestException('Total tidak boleh kosong');
+      }
 
       const newOrder = await this.prisma.order.create({
         data: {

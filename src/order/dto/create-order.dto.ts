@@ -5,6 +5,7 @@ import {
   ValidateNested,
   IsOptional,
   IsIn,
+  IsInt,
 } from 'class-validator';
 
 import { Type } from 'class-transformer';
@@ -19,6 +20,9 @@ export class CreateOrderDto {
   @IsNotEmpty()
   tableNumber!: string;
 
+  @IsInt()
+  total!: number;
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateOrderItemDto)
@@ -28,4 +32,8 @@ export class CreateOrderDto {
   @IsString()
   @IsIn(['CASH', 'QRIS'])
   paymentMethod?: string = 'CASH';
+
+  @IsOptional()
+  @IsIn(['UNPAID', 'PAID'])
+  paymentStatus?: string = 'UNPAID';
 }
