@@ -51,7 +51,7 @@ export class OrderService {
         return {
           menuId: item.menuId,
           qty: item.qty,
-          subtotal: price * item.qty, // hitung otomatis, tidak perlu dari frontend
+          subtotal: price * item.qty,
         };
       });
 
@@ -100,7 +100,7 @@ export class OrderService {
       const now = new Date();
 
       // Set ke WIB (UTC+7)
-      const wibOffset = 7 * 60 * 60 * 1000; // 7 jam dalam milidetik
+      const wibOffset = 7 * 60 * 60 * 1000;
       const nowWIB = new Date(now.getTime() + wibOffset);
 
       let startDateWIB = new Date(nowWIB);
@@ -122,11 +122,8 @@ export class OrderService {
         );
       }
 
-      // Convert balik ke UTC untuk query database
       const startDateUTC = new Date(startDateWIB.getTime() - wibOffset);
       const endDateUTC = new Date(nowWIB.getTime() - wibOffset);
-
-      // Set endDate ke akhir hari
       endDateUTC.setHours(23, 59, 59, 999);
 
       const whereClause: Prisma.OrderWhereInput = {
@@ -166,7 +163,6 @@ export class OrderService {
       );
 
       const formattedOrders = ordersRaw.map((order) => {
-        // Convert createdAt ke WIB untuk display
         const dateUTC = new Date(order.createdAt);
         const dateWIB = new Date(dateUTC.getTime() + wibOffset);
 
@@ -309,6 +305,31 @@ export class OrderService {
     return this.prisma.order.findUnique({
       where: { id },
       include: { orderItems: { include: { menu: true } } },
+    });
+  }
+
+  // ==========================================
+  // 11. CLAIM ORDER (CASHIER CLAIM ORDER FROM USER)
+  // ==========================================
+  async claimOrder(orderId: number, cashierId: number) {
+    // Cek apakah order ada
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+    });
+
+    if (!order) {
+      throw new BadRequestException('Order tidak ditemukan');
+    }
+
+    // Cek apakah order sudah diambil kasir lain
+    if (order.cashierId !== null) {
+      throw new BadRequestException('Pesanan sudah diambil oleh kasir lain');
+    }
+
+    // Update cashierId
+    return this.prisma.order.update({
+      where: { id: orderId },
+      data: { cashierId: cashierId },
     });
   }
 }

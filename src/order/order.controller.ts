@@ -125,6 +125,24 @@ export class OrderController {
   }
 
   // =========================
+  // CLAIM ORDER (CASHIER CLAIM ORDER FROM USER)
+  // =========================
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('CASHIER')
+  @Patch(':id/claim')
+  claimOrder(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() req: RequestWithUser,
+  ) {
+    const user = req.user;
+    if (!user?.id) {
+      throw new UnauthorizedException('Anda belum login');
+    }
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call
+    return this.orderService.claimOrder(id, user.id);
+  }
+
+  // =========================
   // DELETE ORDER
   // =========================
   @UseGuards(JwtAuthGuard, RolesGuard)
