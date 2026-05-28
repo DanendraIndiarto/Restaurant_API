@@ -3,9 +3,14 @@ import {
   BadRequestException,
   InternalServerErrorException,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service'; // Sesuaikan path jika folder prisma kamu berbeda
+import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
-import { PaymentStatus } from '@prisma/client';
+import {
+  PaymentStatus,
+  OrderStatus,
+  PaymentMethod,
+  Prisma,
+} from '@prisma/client';
 
 @Injectable()
 export class OrderService {
@@ -16,26 +21,32 @@ export class OrderService {
   // ==========================================
   async create(dto: CreateOrderDto, cashierId: number) {
     try {
-      // Menangani jika order dibuat oleh pelanggan langsung (cashierId = 0)
       const assignedCashierId = cashierId === 0 ? null : cashierId;
 
-      // Destrukturisasi dto untuk memisahkan data order utama dan array items
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      const { items, ...orderData } = dto as any;
+      // Type-safe destructuring menggunakan Prisma input types
+      const { items, ...orderData } = dto as unknown as {
+        customerName: string;
+        tableNumber: string;
+        total: number;
+        status?: OrderStatus;
+        paymentMethod?: PaymentMethod;
+        paymentStatus?: PaymentStatus;
+        items?: Array<{ menuId: number; qty: number; subtotal: number }>;
+      };
 
       const newOrder = await this.prisma.order.create({
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         data: {
-          ...orderData,
+          customerName: orderData.customerName,
+          tableNumber: orderData.tableNumber,
+          total: orderData.total,
+          status: orderData.status,
+          paymentMethod: orderData.paymentMethod,
+          paymentStatus: orderData.paymentStatus,
           cashierId: assignedCashierId,
           orderItems: {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-            create: items?.map((item: any) => ({
-              // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+            create: items?.map((item) => ({
               menuId: item.menuId,
-              // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
               qty: item.qty,
-              // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
               subtotal: item.subtotal,
             })),
           },
@@ -77,32 +88,28 @@ export class OrderService {
         );
       }
 
-      // Filter berdasarkan range tanggal
-      const whereClause: any = {
+      // Filter menggunakan Prisma strictly-typed conditions
+      const whereClause: Prisma.OrderWhereInput = {
         createdAt: {
           gte: startDate,
           lte: now,
         },
       };
 
-      // Jika yang login CASHIER, batasi hanya melihat transaksi miliknya
       if (role === 'CASHIER') {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         whereClause.cashierId = userId;
       }
 
-      // Ambil data sesuai relasi nyata di schema.prisma kamu
       const ordersRaw = await this.prisma.order.findMany({
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         where: whereClause,
         include: {
           cashier: {
-            select: { username: true }, // Model User menggunakan properti 'username'
+            select: { username: true },
           },
           orderItems: {
             include: {
               menu: {
-                select: { name: true }, // Mengambil nama menu dari model Menu
+                select: { name: true },
               },
             },
           },
@@ -118,7 +125,6 @@ export class OrderService {
         0,
       );
 
-      // Normalisasi data agar dibaca mulus oleh halaman page.tsx Next.js kamu
       const formattedOrders = ordersRaw.map((order) => {
         const dateObj = new Date(order.createdAt);
 
@@ -186,7 +192,7 @@ export class OrderService {
   }
 
   // ==========================================
-  // 5. GET ALL ORDER (DENGAN FILTER SINKRON KASIR)
+  // 5. GET ALL ORDER
   // ==========================================
   async findAll(cashierId?: number) {
     if (cashierId) {
@@ -203,10 +209,9 @@ export class OrderService {
   // ==========================================
   // 6. UPDATE STATUS
   // ==========================================
-  async updateStatus(id: number, status: any) {
+  async updateStatus(id: number, status: OrderStatus) {
     return this.prisma.order.update({
       where: { id },
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       data: { status },
     });
   }
@@ -214,15 +219,17 @@ export class OrderService {
   // ==========================================
   // 7. UPDATE PAYMENT
   // ==========================================
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async updatePayment(id: number, paymentMethod: any, _amount: number) {
-    // Logika opsional tambahan: bandingkan field 'amount' uang masuk dengan total belanja di sini jika perlu
+  async updatePayment(
+    id: number,
+    paymentMethod: PaymentMethod,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _amount: number,
+  ) {
     return this.prisma.order.update({
       where: { id },
       data: {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         paymentMethod,
-        paymentStatus: PaymentStatus.PAID, // Menggunakan enum PAID asli dari schema.prisma
+        paymentStatus: PaymentStatus.PAID,
       },
     });
   }
