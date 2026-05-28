@@ -236,15 +236,18 @@ export class OrderService {
   // ==========================================
   // 5. GET ALL ORDER
   // ==========================================
-  async findAll(cashierId?: number) {
-    if (cashierId) {
-      return this.prisma.order.findMany({
-        where: { cashierId },
-        include: { orderItems: { include: { menu: true } } },
-      });
-    }
+  async findAll() {
+    // Semua user (ADMIN & CASHIER) bisa melihat semua order
+    // Termasuk order dari user (cashierId = null)
     return this.prisma.order.findMany({
-      include: { orderItems: { include: { menu: true } } },
+      include: {
+        orderItems: {
+          include: { menu: true },
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
     });
   }
 

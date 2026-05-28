@@ -91,11 +91,8 @@ export class OrderController {
       throw new UnauthorizedException('Anda belum login');
     }
 
-    if (user.role === 'ADMIN') {
-      return this.orderService.findAll();
-    }
-
-    return this.orderService.findAll(user.id);
+    // ADMIN dan CASHIER sama-sama lihat semua order
+    return this.orderService.findAll();
   }
 
   // =========================
