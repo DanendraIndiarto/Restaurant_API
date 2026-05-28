@@ -98,29 +98,41 @@ export class OrderService {
   async report(type: string, role: string, userId: number) {
     try {
       const now = new Date();
-      let startDate = new Date();
+
+      // Set ke WIB (UTC+7)
+      const wibOffset = 7 * 60 * 60 * 1000; // 7 jam dalam milidetik
+      const nowWIB = new Date(now.getTime() + wibOffset);
+
+      let startDateWIB = new Date(nowWIB);
 
       if (type === 'daily') {
-        startDate.setHours(0, 0, 0, 0);
+        startDateWIB.setHours(0, 0, 0, 0);
       } else if (type === 'weekly') {
-        const day = startDate.getDay();
-        const diff = startDate.getDate() - day + (day === 0 ? -6 : 1);
-        startDate.setDate(diff);
-        startDate.setHours(0, 0, 0, 0);
+        const day = startDateWIB.getDay();
+        const diff = startDateWIB.getDate() - day + (day === 0 ? -6 : 1);
+        startDateWIB.setDate(diff);
+        startDateWIB.setHours(0, 0, 0, 0);
       } else if (type === 'monthly') {
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        startDateWIB = new Date(nowWIB.getFullYear(), nowWIB.getMonth(), 1);
       } else if (type === 'yearly') {
-        startDate = new Date(now.getFullYear(), 0, 1);
+        startDateWIB = new Date(nowWIB.getFullYear(), 0, 1);
       } else {
         throw new BadRequestException(
           'Tipe laporan tidak valid. Gunakan daily, weekly, monthly, atau yearly.',
         );
       }
 
+      // Convert balik ke UTC untuk query database
+      const startDateUTC = new Date(startDateWIB.getTime() - wibOffset);
+      const endDateUTC = new Date(nowWIB.getTime() - wibOffset);
+
+      // Set endDate ke akhir hari
+      endDateUTC.setHours(23, 59, 59, 999);
+
       const whereClause: Prisma.OrderWhereInput = {
         createdAt: {
-          gte: startDate,
-          lte: now,
+          gte: startDateUTC,
+          lte: endDateUTC,
         },
       };
 
@@ -154,7 +166,9 @@ export class OrderService {
       );
 
       const formattedOrders = ordersRaw.map((order) => {
-        const dateObj = new Date(order.createdAt);
+        // Convert createdAt ke WIB untuk display
+        const dateUTC = new Date(order.createdAt);
+        const dateWIB = new Date(dateUTC.getTime() + wibOffset);
 
         return {
           id: order.id,
@@ -164,8 +178,8 @@ export class OrderService {
           status: order.status,
           paymentMethod: order.paymentMethod,
           paymentStatus: order.paymentStatus,
-          date: dateObj.toLocaleDateString('id-ID'),
-          time: dateObj.toLocaleTimeString('id-ID', {
+          date: dateWIB.toLocaleDateString('id-ID'),
+          time: dateWIB.toLocaleTimeString('id-ID', {
             hour: '2-digit',
             minute: '2-digit',
           }),
