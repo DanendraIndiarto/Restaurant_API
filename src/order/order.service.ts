@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { PaymentMethod, PaymentStatus } from '@prisma/client';
 
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderStatus } from './dto/update-order-status.dto';
@@ -8,7 +9,7 @@ import { OrderStatus } from './dto/update-order-status.dto';
 export class OrderService {
   constructor(private prisma: PrismaService) {}
 
-  async create(dto: CreateOrderDto) {
+  async create(dto: CreateOrderDto, cashierId: number) {
     const menus = await Promise.all(
       dto.items.map(async (item) => {
         const menu = await this.prisma.menu.findUnique({
@@ -36,11 +37,21 @@ export class OrderService {
       0,
     );
 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const paymentMethodEnum =
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      dto.paymentMethod === 'QRIS' ? PaymentMethod.QRIS : PaymentMethod.CASH;
+
     return this.prisma.order.create({
       data: {
         customerName: dto.customerName,
         tableNumber: dto.tableNumber,
         total,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        paymentMethod: paymentMethodEnum,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+        paymentStatus: PaymentStatus.UNPAID,
+        cashierId: cashierId,
         orderItems: {
           create: menus,
         },
@@ -51,18 +62,23 @@ export class OrderService {
             menu: true,
           },
         },
+        cashier: true,
       },
     });
   }
 
-  async findAll() {
+  async findAll(cashierId?: number) {
+    const where = cashierId ? { cashierId } : {};
+
     return this.prisma.order.findMany({
+      where,
       include: {
         orderItems: {
           include: {
             menu: true,
           },
         },
+        cashier: true,
       },
       orderBy: {
         createdAt: 'desc',
@@ -79,6 +95,7 @@ export class OrderService {
             menu: true,
           },
         },
+        cashier: true,
       },
     });
 
@@ -104,7 +121,32 @@ export class OrderService {
     });
   }
 
-  // HAPUS ORDER BY ID
+  async updatePayment(id: number, paymentMethod: string, amount: number) {
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order tidak ditemukan');
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const paymentMethodEnum =
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      paymentMethod === 'CASH' ? PaymentMethod.CASH : PaymentMethod.QRIS;
+
+    return this.prisma.order.update({
+      where: { id },
+      data: {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        paymentMethod: paymentMethodEnum,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+        paymentStatus: PaymentStatus.PAID,
+        total: amount,
+      },
+    });
+  }
+
   async remove(id: number) {
     const order = await this.prisma.order.findUnique({
       where: { id },
@@ -114,27 +156,20 @@ export class OrderService {
       throw new NotFoundException('Order tidak ditemukan');
     }
 
-    // Hapus order items dulu
     await this.prisma.orderItem.deleteMany({
       where: { orderId: id },
     });
 
-    // Hapus order
     return this.prisma.order.delete({
       where: { id },
     });
   }
 
-  // HAPUS SEMUA ORDER
   async removeAll() {
-    // Hapus semua order items dulu
     await this.prisma.orderItem.deleteMany();
-
-    // Hapus semua order
     return this.prisma.order.deleteMany();
   }
 
-  // HISTORY PEMBELIAN
   async history() {
     return this.prisma.order.findMany({
       include: {
@@ -143,6 +178,7 @@ export class OrderService {
             menu: true,
           },
         },
+        cashier: true,
       },
       orderBy: {
         createdAt: 'desc',
@@ -150,7 +186,6 @@ export class OrderService {
     });
   }
 
-  // DETAIL HISTORY
   async historyDetail(id: number) {
     const order = await this.prisma.order.findUnique({
       where: { id },
@@ -160,6 +195,7 @@ export class OrderService {
             menu: true,
           },
         },
+        cashier: true,
       },
     });
 
@@ -170,9 +206,7 @@ export class OrderService {
     return order;
   }
 
-  // REPORT
-  async report(type: string) {
-    // 1. Ambil waktu sekarang di zona waktu Asia/Jakarta
+  async report(type: string, userRole: string, userId: number) {
     const tz = 'Asia/Jakarta';
     const nowString = new Date().toLocaleString('en-US', { timeZone: tz });
     const now = new Date(nowString);
@@ -180,7 +214,6 @@ export class OrderService {
     const startDate = new Date(nowString);
 
     if (type === 'daily') {
-      // Set ke jam 00:00:00 waktu lokal Waktu Indonesia Barat
       startDate.setHours(0, 0, 0, 0);
     } else if (type === 'weekly') {
       startDate.setDate(now.getDate() - 7);
@@ -192,24 +225,35 @@ export class OrderService {
       throw new NotFoundException('Tipe report tidak valid');
     }
 
-    // Konversi balik startDate lokal ke bentuk UTC Object sebelum dikirim ke query Prisma
     const offset =
       new Date().getTime() -
       new Date(new Date().toLocaleString('en-US', { timeZone: tz })).getTime();
     const targetUtcDate = new Date(startDate.getTime() + offset);
 
-    const orders = await this.prisma.order.findMany({
-      where: {
-        createdAt: {
-          gte: targetUtcDate,
-        },
+    const whereCondition: {
+      createdAt: {
+        gte: Date;
+      };
+      cashierId?: number;
+    } = {
+      createdAt: {
+        gte: targetUtcDate,
       },
+    };
+
+    if (userRole === 'CASHIER') {
+      whereCondition.cashierId = userId;
+    }
+
+    const orders = await this.prisma.order.findMany({
+      where: whereCondition,
       include: {
         orderItems: {
           include: {
             menu: true,
           },
         },
+        cashier: true,
       },
       orderBy: {
         createdAt: 'desc',
@@ -217,7 +261,6 @@ export class OrderService {
     });
 
     const totalOrders = orders.length;
-
     const totalIncome = orders.reduce(
       (accumulator, order) => accumulator + order.total,
       0,
@@ -229,15 +272,23 @@ export class OrderService {
       tableNumber: order.tableNumber,
       total: order.total,
       status: order.status,
-
-      // 2. Memaksa format output string mengikuti zona waktu Asia/Jakarta secara spesifik
+      paymentMethod:
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        order.paymentMethod === PaymentMethod.CASH ? 'CASH' : 'QRIS',
+      paymentStatus:
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        order.paymentStatus === PaymentStatus.PAID ? 'PAID' : 'UNPAID',
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+      cashier: order.cashier?.username || 'Sistem',
       date: order.createdAt.toLocaleDateString('id-ID', { timeZone: tz }),
       time: order.createdAt
         .toLocaleTimeString('id-ID', { timeZone: tz })
-        .replace(/\./g, ':'), // Mengubah format 12.21.24 menjadi 12:21:24 jika dibutuhkan
-
+        .replace(/\./g, ':'),
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
       items: order.orderItems.map((item) => ({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
         menu: item.menu.name,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
         qty: item.qty,
         subtotal: item.subtotal,
       })),

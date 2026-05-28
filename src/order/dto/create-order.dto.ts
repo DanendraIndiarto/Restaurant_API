@@ -1,4 +1,11 @@
-import { IsArray, IsNotEmpty, IsString, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsNotEmpty,
+  IsString,
+  ValidateNested,
+  IsOptional,
+  IsIn,
+} from 'class-validator';
 
 import { Type } from 'class-transformer';
 import { CreateOrderItemDto } from './create-order-item.dto';
@@ -16,4 +23,9 @@ export class CreateOrderDto {
   @ValidateNested({ each: true })
   @Type(() => CreateOrderItemDto)
   items!: CreateOrderItemDto[];
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['CASH', 'QRIS'])
+  paymentMethod?: string = 'CASH';
 }

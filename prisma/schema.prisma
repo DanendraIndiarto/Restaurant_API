@@ -13,6 +13,8 @@ model User {
   password  String
   role      Role
   createdAt DateTime @default(now())
+
+  orders Order[]
 }
 
 model Category {
@@ -37,14 +39,22 @@ model Menu {
 }
 
 model Order {
-  id           Int         @id @default(autoincrement())
-  customerName String
-  tableNumber  String
-  total        Int
-  status       OrderStatus @default(PENDING)
-  createdAt    DateTime    @default(now())
+  id             Int          @id @default(autoincrement())
+  customerName   String
+  tableNumber    String
+  total          Int
+  status         OrderStatus  @default(PENDING)
+  paymentMethod  PaymentMethod @default(CASH)
+  paymentStatus  PaymentStatus @default(UNPAID)
+  cashierId      Int
+  createdAt      DateTime     @default(now())
 
+  cashier   User      @relation(fields: [cashierId], references: [id])
   orderItems OrderItem[]
+
+  @@index([cashierId])
+  @@index([createdAt])
+  @@index([paymentStatus])
 }
 
 model OrderItem {
@@ -54,8 +64,11 @@ model OrderItem {
   qty       Int
   subtotal  Int
 
-  order Order @relation(fields: [orderId], references: [id])
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
   menu  Menu  @relation(fields: [menuId], references: [id])
+
+  @@index([orderId])
+  @@index([menuId])
 }
 
 enum Role {
@@ -68,4 +81,14 @@ enum OrderStatus {
   PROCESS
   DONE
   CANCEL
+}
+
+enum PaymentMethod {
+  CASH
+  QRIS
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
 }

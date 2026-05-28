@@ -8,6 +8,7 @@ import {
   Patch,
   Post,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 
 import { OrderService } from './order.service';
@@ -23,18 +24,28 @@ import { Roles } from 'src/auth/decorator/roles.decorator';
 export class OrderController {
   constructor(private readonly orderService: OrderService) {}
 
-  // PUBLIC (customer tanpa login)
+  // PUBLIC (customer tanpa login) - tetap bisa buat order
   @Post()
   create(@Body() dto: CreateOrderDto) {
-    return this.orderService.create(dto);
+    // Customer tidak perlu cashierId, nanti di kasir yang assign
+    return this.orderService.create(dto, 0); // 0 = belum assign kasir
   }
 
   // CASHIER & ADMIN
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('CASHIER', 'ADMIN')
   @Get()
-  findAll() {
-    return this.orderService.findAll();
+  findAll(@Req() req) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+    const userId = req.user.id;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+    const userRole = req.user.role;
+
+    // ADMIN bisa lihat semua order, CASHIER hanya lihat order miliknya
+    if (userRole === 'ADMIN') {
+      return this.orderService.findAll();
+    }
+    return this.orderService.findAll(userId);
   }
 
   // CASHIER & ADMIN
@@ -45,7 +56,7 @@ export class OrderController {
     return this.orderService.findOne(id);
   }
 
-  // CASHIER ONLY
+  // CASHIER ONLY - update status pesanan
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('CASHIER')
   @Patch(':id')
@@ -56,12 +67,22 @@ export class OrderController {
     return this.orderService.updateStatus(id, dto.status);
   }
 
+  // CASHIER ONLY - proses pembayaran
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('CASHIER')
+  @Patch(':id/payment')
+  updatePayment(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { paymentMethod: string; amount: number },
+  ) {
+    return this.orderService.updatePayment(id, body.paymentMethod, body.amount);
+  }
+
   // ADMIN ONLY - HAPUS ORDER
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call
     return this.orderService.remove(id);
   }
 
@@ -70,7 +91,6 @@ export class OrderController {
   @Roles('ADMIN')
   @Delete('all/clear')
   removeAll() {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call
     return this.orderService.removeAll();
   }
 
@@ -94,7 +114,11 @@ export class OrderController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('CASHIER', 'ADMIN')
   @Get('report/:type')
-  report(@Param('type') type: string) {
-    return this.orderService.report(type);
+  report(@Param('type') type: string, @Req() req) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+    const userRole = req.user.role;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+    const userId = req.user.id;
+    return this.orderService.report(type, userRole, userId);
   }
 }

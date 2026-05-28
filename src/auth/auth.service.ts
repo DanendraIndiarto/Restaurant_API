@@ -29,18 +29,20 @@ export class AuthService {
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-    const valid = await bcrypt.compare(password, user.password);
+    const isValidPassword = await bcrypt.compare(password, user.password);
 
-    if (!valid) {
+    if (!isValidPassword) {
       throw new UnauthorizedException('Password salah');
     }
 
+    const payload = {
+      sub: user.id,
+      username: user.username,
+      role: user.role,
+    };
+
     return {
-      access_token: this.jwtService.sign({
-        sub: user.id,
-        username: user.username,
-        role: user.role,
-      }),
+      access_token: this.jwtService.sign(payload),
     };
   }
 
