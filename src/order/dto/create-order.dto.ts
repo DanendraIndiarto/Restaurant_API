@@ -36,4 +36,5 @@ export class CreateOrderDto {
   @IsOptional()
   @IsIn(['UNPAID', 'PAID'])
   paymentStatus?: string = 'UNPAID';
+  status!: string;
 }

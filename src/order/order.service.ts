@@ -17,50 +17,42 @@ export class OrderService {
   constructor(private readonly prisma: PrismaService) {}
 
   // ==========================================
-  // 1. CREATE ORDER
+  // 1. CREATE ORDER - FIXED (NO ESLINT ERRORS)
   // ==========================================
   async create(dto: CreateOrderDto, cashierId: number) {
     try {
       const assignedCashierId = cashierId === 0 ? null : cashierId;
 
-      // Type-safe destructuring menggunakan Prisma input types
-      const { items, ...orderData } = dto as unknown as {
-        customerName: string;
-        tableNumber: string;
-        total: number;
-        status?: OrderStatus;
-        paymentMethod?: PaymentMethod;
-        paymentStatus?: PaymentStatus;
-        items?: Array<{ menuId: number; qty: number; subtotal: number }>;
-      };
-      if (!orderData.total) {
+      // Validasi
+      if (!dto.total && dto.total !== 0) {
         throw new BadRequestException('Total tidak boleh kosong');
       }
 
-      if (!items || items.length === 0) {
+      if (!dto.items || dto.items.length === 0) {
         throw new BadRequestException('Items tidak boleh kosong');
       }
 
-      if (!orderData.total && orderData.total !== 0) {
-        throw new BadRequestException('Total tidak boleh kosong');
-      }
+      // Siapkan data items dengan tipe yang jelas
+      const orderItemsData = dto.items.map((item) => ({
+        menuId: item.menuId,
+        qty: item.qty,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        subtotal: item.subtotal,
+      }));
 
       const newOrder = await this.prisma.order.create({
         data: {
-          customerName: orderData.customerName,
-          tableNumber: orderData.tableNumber,
-          total: orderData.total,
-          status: orderData.status,
-          paymentMethod: orderData.paymentMethod ?? PaymentMethod.CASH,
-          paymentStatus: orderData.paymentStatus ?? PaymentStatus.UNPAID,
+          customerName: dto.customerName,
+          tableNumber: dto.tableNumber,
+          total: dto.total,
+          status: (dto.status ?? OrderStatus.PENDING) as OrderStatus,
+          paymentMethod: (dto.paymentMethod ??
+            PaymentMethod.CASH) as PaymentMethod,
+          paymentStatus: (dto.paymentStatus ??
+            PaymentStatus.UNPAID) as PaymentStatus,
           cashierId: assignedCashierId,
-
           orderItems: {
-            create: items.map((item) => ({
-              menuId: item.menuId,
-              qty: item.qty,
-              subtotal: item.subtotal ?? 0,
-            })),
+            create: orderItemsData,
           },
         },
       });
@@ -68,12 +60,25 @@ export class OrderService {
       return { message: 'Order berhasil dibuat', data: newOrder };
     } catch (error) {
       console.error('CRASH CREATE ORDER:', error);
-      throw error;
+
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === 'P2003') {
+          throw new BadRequestException('Menu ID tidak valid');
+        }
+      }
+
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+
+      throw new InternalServerErrorException(
+        'Terjadi kesalahan saat membuat order',
+      );
     }
   }
 
   // ==========================================
-  // 2. REPORT (SINKRON DENGAN SCHEMA & FRONTEND)
+  // 2. REPORT
   // ==========================================
   async report(type: string, role: string, userId: number) {
     try {
@@ -97,7 +102,6 @@ export class OrderService {
         );
       }
 
-      // Filter menggunakan Prisma strictly-typed conditions
       const whereClause: Prisma.OrderWhereInput = {
         createdAt: {
           gte: startDate,

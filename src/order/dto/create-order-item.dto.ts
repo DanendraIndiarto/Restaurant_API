@@ -7,4 +7,5 @@ export class CreateOrderItemDto {
   @IsInt()
   @Min(1)
   qty!: number;
+  subtotal: any;
 }
