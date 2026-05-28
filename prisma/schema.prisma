@@ -53,6 +53,8 @@ model Order {
   cashier   User? @relation(fields: [cashierId], references: [id])
 
   orderItems OrderItem[]
+  
+  @@map("orders")  // ← tambah ini saja
 }
 
 model OrderItem {
