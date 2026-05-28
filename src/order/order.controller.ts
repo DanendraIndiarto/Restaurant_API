@@ -24,7 +24,9 @@ import { Roles } from 'src/auth/decorator/roles.decorator';
 export class OrderController {
   constructor(private readonly orderService: OrderService) {}
 
-  // PUBLIC (customer tanpa login)
+  // =========================
+  // CREATE ORDER (PUBLIC)
+  // =========================
   @Post()
   create(@Body() dto: CreateOrderDto) {
     return this.orderService.create(dto, 0);
@@ -37,17 +39,16 @@ export class OrderController {
   @Roles('CASHIER', 'ADMIN')
   @Get('report/:type')
   report(@Param('type') type: string, @Req() req) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
     const userRole = req.user.role;
-
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
     const userId = req.user.id;
 
     return this.orderService.report(type, userRole, userId);
   }
 
   // =========================
-  // HISTORY PEMBELIAN
+  // HISTORY ALL
   // =========================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'CASHIER')
@@ -57,11 +58,11 @@ export class OrderController {
   }
 
   // =========================
-  // DETAIL HISTORY
+  // HISTORY DETAIL (HARUS DI ATAS /:id)
   // =========================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'CASHIER')
-  @Get('history/:id')
+  @Get('history/detail/:id')
   historyDetail(@Param('id', ParseIntPipe) id: number) {
     return this.orderService.historyDetail(id);
   }
@@ -73,18 +74,15 @@ export class OrderController {
   @Roles('CASHIER', 'ADMIN')
   @Get()
   findAll(@Req() req) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
     const userId = req.user.id;
-
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
     const userRole = req.user.role;
 
-    // ADMIN lihat semua
     if (userRole === 'ADMIN') {
       return this.orderService.findAll();
     }
 
-    // CASHIER lihat order miliknya
     return this.orderService.findAll(userId);
   }
 
@@ -93,7 +91,7 @@ export class OrderController {
   // =========================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('CASHIER')
-  @Patch(':id')
+  @Patch(':id/status')
   updateStatus(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateOrderStatusDto,
@@ -125,7 +123,7 @@ export class OrderController {
   }
 
   // =========================
-  // DELETE ALL ORDER
+  // DELETE ALL
   // =========================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
@@ -135,8 +133,7 @@ export class OrderController {
   }
 
   // =========================
-  // DETAIL ORDER
-  // TARUH PALING BAWAH
+  // DETAIL ORDER (PALING BAWAH)
   // =========================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('CASHIER', 'ADMIN')

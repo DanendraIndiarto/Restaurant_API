@@ -1,6 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
-
 import { PaymentMethod, PaymentStatus } from '@prisma/client';
 
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -17,9 +16,7 @@ export class OrderService {
     const menus = await Promise.all(
       dto.items.map(async (item) => {
         const menu = await this.prisma.menu.findUnique({
-          where: {
-            id: item.menuId,
-          },
+          where: { id: item.menuId },
         });
 
         if (!menu) {
@@ -36,7 +33,7 @@ export class OrderService {
       }),
     );
 
-    const total = menus.reduce((acc, item) => acc + item.subtotal, 0);
+    const total = menus.reduce((a, b) => a + b.subtotal, 0);
 
     const paymentMethodEnum =
       dto.paymentMethod === 'QRIS' ? PaymentMethod.QRIS : PaymentMethod.CASH;
@@ -55,9 +52,7 @@ export class OrderService {
       },
       include: {
         orderItems: {
-          include: {
-            menu: true,
-          },
+          include: { menu: true },
         },
         cashier: true,
       },
@@ -68,21 +63,13 @@ export class OrderService {
   // GET ALL ORDER
   // =========================
   async findAll(cashierId?: number) {
-    const where = cashierId ? { cashierId } : {};
-
     return this.prisma.order.findMany({
-      where,
+      where: cashierId ? { cashierId } : undefined,
       include: {
-        orderItems: {
-          include: {
-            menu: true,
-          },
-        },
+        orderItems: { include: { menu: true } },
         cashier: true,
       },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      orderBy: { createdAt: 'desc' },
     });
   }
 
@@ -93,18 +80,12 @@ export class OrderService {
     const order = await this.prisma.order.findUnique({
       where: { id },
       include: {
-        orderItems: {
-          include: {
-            menu: true,
-          },
-        },
+        orderItems: { include: { menu: true } },
         cashier: true,
       },
     });
 
-    if (!order) {
-      throw new NotFoundException('Order tidak ditemukan');
-    }
+    if (!order) throw new NotFoundException('Order tidak ditemukan');
 
     return order;
   }
@@ -113,19 +94,13 @@ export class OrderService {
   // UPDATE STATUS
   // =========================
   async updateStatus(id: number, status: OrderStatus) {
-    const order = await this.prisma.order.findUnique({
-      where: { id },
-    });
+    const order = await this.prisma.order.findUnique({ where: { id } });
 
-    if (!order) {
-      throw new NotFoundException('Order tidak ditemukan');
-    }
+    if (!order) throw new NotFoundException('Order tidak ditemukan');
 
     return this.prisma.order.update({
       where: { id },
-      data: {
-        status,
-      },
+      data: { status },
     });
   }
 
@@ -133,13 +108,9 @@ export class OrderService {
   // UPDATE PAYMENT
   // =========================
   async updatePayment(id: number, paymentMethod: string, amount: number) {
-    const order = await this.prisma.order.findUnique({
-      where: { id },
-    });
+    const order = await this.prisma.order.findUnique({ where: { id } });
 
-    if (!order) {
-      throw new NotFoundException('Order tidak ditemukan');
-    }
+    if (!order) throw new NotFoundException('Order tidak ditemukan');
 
     const paymentMethodEnum =
       paymentMethod === 'QRIS' ? PaymentMethod.QRIS : PaymentMethod.CASH;
@@ -158,31 +129,22 @@ export class OrderService {
   // DELETE ORDER
   // =========================
   async remove(id: number) {
-    const order = await this.prisma.order.findUnique({
-      where: { id },
-    });
+    const order = await this.prisma.order.findUnique({ where: { id } });
 
-    if (!order) {
-      throw new NotFoundException('Order tidak ditemukan');
-    }
+    if (!order) throw new NotFoundException('Order tidak ditemukan');
 
     await this.prisma.orderItem.deleteMany({
-      where: {
-        orderId: id,
-      },
+      where: { orderId: id },
     });
 
-    return this.prisma.order.delete({
-      where: { id },
-    });
+    return this.prisma.order.delete({ where: { id } });
   }
 
   // =========================
-  // DELETE ALL ORDER
+  // DELETE ALL
   // =========================
   async removeAll() {
     await this.prisma.orderItem.deleteMany();
-
     return this.prisma.order.deleteMany();
   }
 
@@ -192,16 +154,10 @@ export class OrderService {
   async history() {
     return this.prisma.order.findMany({
       include: {
-        orderItems: {
-          include: {
-            menu: true,
-          },
-        },
+        orderItems: { include: { menu: true } },
         cashier: true,
       },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      orderBy: { createdAt: 'desc' },
     });
   }
 
@@ -212,28 +168,21 @@ export class OrderService {
     const order = await this.prisma.order.findUnique({
       where: { id },
       include: {
-        orderItems: {
-          include: {
-            menu: true,
-          },
-        },
+        orderItems: { include: { menu: true } },
         cashier: true,
       },
     });
 
-    if (!order) {
-      throw new NotFoundException('History tidak ditemukan');
-    }
+    if (!order) throw new NotFoundException('History tidak ditemukan');
 
     return order;
   }
 
   // =========================
-  // REPORT
+  // REPORT (FIXED SAFE VERSION)
   // =========================
   async report(type: string, userRole: string, userId: number) {
     const now = new Date();
-
     const startDate = new Date();
 
     switch (type) {
@@ -257,72 +206,55 @@ export class OrderService {
         throw new NotFoundException('Tipe report tidak valid');
     }
 
-    const whereCondition: {
-      createdAt: {
-        gte: Date;
-      };
-      cashierId?: number;
-    } = {
+    const where: any = {
       createdAt: {
         gte: startDate,
       },
     };
 
-    // CASHIER hanya lihat miliknya
     if (userRole === 'CASHIER') {
-      whereCondition.cashierId = userId;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      where.cashierId = userId;
     }
 
     const orders = await this.prisma.order.findMany({
-      where: whereCondition,
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      where,
       include: {
-        orderItems: {
-          include: {
-            menu: true,
-          },
-        },
+        orderItems: { include: { menu: true } },
         cashier: true,
       },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      orderBy: { createdAt: 'desc' },
     });
 
     const totalOrders = orders.length;
 
-    const totalIncome = orders.reduce((acc, order) => acc + order.total, 0);
-
-    const formattedOrders = orders.map((order) => ({
-      id: order.id,
-      customerName: order.customerName,
-      tableNumber: order.tableNumber,
-      total: order.total,
-      status: order.status,
-
-      paymentMethod:
-        order.paymentMethod === PaymentMethod.CASH ? 'CASH' : 'QRIS',
-
-      paymentStatus:
-        order.paymentStatus === PaymentStatus.PAID ? 'PAID' : 'UNPAID',
-
-      cashier: order.cashier?.username || 'Sistem',
-
-      date: order.createdAt.toLocaleDateString('id-ID'),
-
-      time: order.createdAt.toLocaleTimeString('id-ID').replace(/\./g, ':'),
-
-      items: order.orderItems.map((item) => ({
-        menu: item.menu.name,
-        qty: item.qty,
-        subtotal: item.subtotal,
-      })),
-    }));
+    const totalIncome = orders.reduce((sum, o) => sum + (o.total || 0), 0);
 
     return {
       type,
       totalOrders,
       totalIncome,
-      orders: formattedOrders,
+      orders: orders.map((order) => ({
+        id: order.id,
+        customerName: order.customerName,
+        tableNumber: order.tableNumber,
+        total: order.total,
+        status: order.status,
+        paymentMethod: order.paymentMethod,
+        paymentStatus: order.paymentStatus,
+        cashier: order.cashier?.username || 'Sistem',
+        date: order.createdAt.toLocaleDateString('id-ID'),
+        time: order.createdAt.toLocaleTimeString('id-ID', {
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        items: order.orderItems.map((item) => ({
+          menu: item.menu.name,
+          qty: item.qty,
+          subtotal: item.subtotal,
+        })),
+      })),
     };
   }
 }
