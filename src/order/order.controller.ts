@@ -24,27 +24,37 @@ import { Roles } from 'src/auth/decorator/roles.decorator';
 export class OrderController {
   constructor(private readonly orderService: OrderService) {}
 
+  // =========================
   // CREATE (PUBLIC)
+  // =========================
   @Post()
   create(@Body() dto: CreateOrderDto) {
+    // cashierId = 0 untuk public order
     return this.orderService.create(dto, 0);
   }
 
-  // REPORT
+  // =========================
+  // REPORT (BASED CASHIER)
+  // =========================
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CASHIER', 'ADMIN')
+  @Roles('ADMIN', 'CASHIER')
   @Get('report/:type')
-  report(@Param('type') type: string, @Req() req) {
+  report(@Param('type') type: string, @Req() req: any) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+    const user = req.user;
+
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    if (!req.user) {
+    if (!user?.id) {
       throw new NotFoundException('Unauthorized');
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
-    return this.orderService.report(type, req.user.role, req.user.id);
+    return this.orderService.report(type, user.role, user.id);
   }
 
+  // =========================
   // HISTORY ALL
+  // =========================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'CASHIER')
   @Get('history/all')
@@ -52,7 +62,9 @@ export class OrderController {
     return this.orderService.history();
   }
 
-  // HISTORY DETAIL (HARUS DI ATAS /:id)
+  // =========================
+  // HISTORY DETAIL
+  // =========================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'CASHIER')
   @Get('history/detail/:id')
@@ -60,21 +72,35 @@ export class OrderController {
     return this.orderService.historyDetail(id);
   }
 
-  // GET ALL
+  // =========================
+  // GET ALL ORDER
+  // =========================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'CASHIER')
   @Get()
-  findAll(@Req() req) {
+  findAll(@Req() req: any) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+    const user = req.user;
+
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-    if (req.user.role === 'ADMIN') {
+    if (!user?.id) {
+      throw new NotFoundException('Unauthorized');
+    }
+
+    // ADMIN lihat semua
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    if (user.role === 'ADMIN') {
       return this.orderService.findAll();
     }
 
+    // CASHIER hanya order dia
     // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
-    return this.orderService.findAll(req.user.id);
+    return this.orderService.findAll(user.id);
   }
 
+  // =========================
   // UPDATE STATUS
+  // =========================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('CASHIER')
   @Patch(':id/status')
@@ -85,7 +111,9 @@ export class OrderController {
     return this.orderService.updateStatus(id, dto.status);
   }
 
+  // =========================
   // UPDATE PAYMENT
+  // =========================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('CASHIER')
   @Patch(':id/payment')
@@ -96,7 +124,9 @@ export class OrderController {
     return this.orderService.updatePayment(id, body.paymentMethod, body.amount);
   }
 
-  // DELETE
+  // =========================
+  // DELETE ORDER
+  // =========================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Delete(':id')
@@ -104,7 +134,9 @@ export class OrderController {
     return this.orderService.remove(id);
   }
 
+  // =========================
   // DELETE ALL
+  // =========================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Delete('all/clear')
@@ -112,7 +144,9 @@ export class OrderController {
     return this.orderService.removeAll();
   }
 
+  // =========================
   // DETAIL ORDER
+  // =========================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'CASHIER')
   @Get(':id')

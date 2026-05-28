@@ -35,15 +35,15 @@ export class OrderService {
 
     const total = menus.reduce((acc, item) => acc + item.subtotal, 0);
 
-    const paymentMethodEnum =
-      dto.paymentMethod === 'QRIS' ? PaymentMethod.QRIS : PaymentMethod.CASH;
-
     return this.prisma.order.create({
       data: {
         customerName: dto.customerName,
         tableNumber: dto.tableNumber,
         total,
-        paymentMethod: paymentMethodEnum,
+        paymentMethod:
+          dto.paymentMethod === 'QRIS'
+            ? PaymentMethod.QRIS
+            : PaymentMethod.CASH,
         paymentStatus: PaymentStatus.UNPAID,
         cashierId,
         orderItems: {
@@ -110,13 +110,11 @@ export class OrderService {
 
     if (!order) throw new NotFoundException('Order tidak ditemukan');
 
-    const paymentMethodEnum =
-      paymentMethod === 'QRIS' ? PaymentMethod.QRIS : PaymentMethod.CASH;
-
     return this.prisma.order.update({
       where: { id },
       data: {
-        paymentMethod: paymentMethodEnum,
+        paymentMethod:
+          paymentMethod === 'QRIS' ? PaymentMethod.QRIS : PaymentMethod.CASH,
         paymentStatus: PaymentStatus.PAID,
         total: amount,
       },
@@ -131,13 +129,15 @@ export class OrderService {
 
     if (!order) throw new NotFoundException('Order tidak ditemukan');
 
-    await this.prisma.orderItem.deleteMany({ where: { orderId: id } });
+    await this.prisma.orderItem.deleteMany({
+      where: { orderId: id },
+    });
 
     return this.prisma.order.delete({ where: { id } });
   }
 
   // =========================
-  // DELETE ALL
+  // DELETE ALL ORDER
   // =========================
   async removeAll() {
     await this.prisma.orderItem.deleteMany();
@@ -175,31 +175,22 @@ export class OrderService {
   }
 
   // =========================
-  // REPORT (FIXED SAFE VERSION)
+  // REPORT (FIXED + CASHIER FILTER)
   // =========================
   async report(type: string, userRole: string, userId: number) {
     const now = new Date();
     const startDate = new Date();
 
-    switch (type) {
-      case 'daily':
-        startDate.setHours(0, 0, 0, 0);
-        break;
-
-      case 'weekly':
-        startDate.setDate(now.getDate() - 7);
-        break;
-
-      case 'monthly':
-        startDate.setMonth(now.getMonth() - 1);
-        break;
-
-      case 'yearly':
-        startDate.setFullYear(now.getFullYear() - 1);
-        break;
-
-      default:
-        throw new NotFoundException('Tipe report tidak valid');
+    if (type === 'daily') {
+      startDate.setHours(0, 0, 0, 0);
+    } else if (type === 'weekly') {
+      startDate.setDate(now.getDate() - 7);
+    } else if (type === 'monthly') {
+      startDate.setMonth(now.getMonth() - 1);
+    } else if (type === 'yearly') {
+      startDate.setFullYear(now.getFullYear() - 1);
+    } else {
+      throw new NotFoundException('Tipe report tidak valid');
     }
 
     const where: {
@@ -209,6 +200,7 @@ export class OrderService {
       createdAt: { gte: startDate },
     };
 
+    // 🔥 INI PENTING: laporan per kasir
     if (userRole === 'CASHIER') {
       where.cashierId = userId;
     }
@@ -223,36 +215,47 @@ export class OrderService {
     });
 
     const totalOrders = orders.length;
-    const totalIncome = orders.reduce((a, b) => a + b.total, 0);
+
+    const totalIncome = orders.reduce((sum, order) => {
+      return sum + (order.total || 0);
+    }, 0);
 
     return {
       type,
       totalOrders,
       totalIncome,
-      orders: orders.map((order) => ({
-        id: order.id,
-        customerName: order.customerName,
-        tableNumber: order.tableNumber,
-        total: order.total,
-        status: order.status,
+      orders: orders.map((order) => {
+        const createdAt = order.createdAt;
 
-        paymentMethod:
-          order.paymentMethod === PaymentMethod.CASH ? 'CASH' : 'QRIS',
+        return {
+          id: order.id,
+          customerName: order.customerName,
+          tableNumber: order.tableNumber,
+          total: order.total,
+          status: order.status,
 
-        paymentStatus:
-          order.paymentStatus === PaymentStatus.PAID ? 'PAID' : 'UNPAID',
+          paymentMethod:
+            order.paymentMethod === PaymentMethod.CASH ? 'CASH' : 'QRIS',
 
-        cashier: order.cashier?.username ?? 'Sistem',
+          paymentStatus:
+            order.paymentStatus === PaymentStatus.PAID ? 'PAID' : 'UNPAID',
 
-        date: order.createdAt.toLocaleDateString('id-ID'),
-        time: order.createdAt.toLocaleTimeString('id-ID').replace(/\./g, ':'),
+          cashier: order.cashier?.username ?? 'Sistem',
 
-        items: order.orderItems.map((item) => ({
-          menu: item.menu.name,
-          qty: item.qty,
-          subtotal: item.subtotal,
-        })),
-      })),
+          date: createdAt.toLocaleDateString('id-ID'),
+
+          time: createdAt.toLocaleTimeString('id-ID', {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+
+          items: order.orderItems.map((item) => ({
+            menu: item.menu?.name ?? 'Menu',
+            qty: item.qty,
+            subtotal: item.subtotal,
+          })),
+        };
+      }),
     };
   }
 }

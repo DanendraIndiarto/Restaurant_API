@@ -46,15 +46,13 @@ model Order {
   status         OrderStatus  @default(PENDING)
   paymentMethod  PaymentMethod @default(CASH)
   paymentStatus  PaymentStatus @default(UNPAID)
-  cashierId      Int
-  createdAt      DateTime     @default(now())
 
-  cashier   User      @relation(fields: [cashierId], references: [id])
+  cashierId      Int?
+  createdAt      DateTime @default(now())
+
+  cashier   User? @relation(fields: [cashierId], references: [id])
+
   orderItems OrderItem[]
-
-  @@index([cashierId])
-  @@index([createdAt])
-  @@index([paymentStatus])
 }
 
 model OrderItem {
