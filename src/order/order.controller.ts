@@ -9,10 +9,10 @@ import {
   Post,
   UseGuards,
   Req,
+  NotFoundException,
 } from '@nestjs/common';
 
 import { OrderService } from './order.service';
-
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 
@@ -24,32 +24,27 @@ import { Roles } from 'src/auth/decorator/roles.decorator';
 export class OrderController {
   constructor(private readonly orderService: OrderService) {}
 
-  // =========================
-  // CREATE ORDER (PUBLIC)
-  // =========================
+  // CREATE (PUBLIC)
   @Post()
   create(@Body() dto: CreateOrderDto) {
     return this.orderService.create(dto, 0);
   }
 
-  // =========================
   // REPORT
-  // =========================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('CASHIER', 'ADMIN')
   @Get('report/:type')
   report(@Param('type') type: string, @Req() req) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-    const userRole = req.user.role;
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-    const userId = req.user.id;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    if (!req.user) {
+      throw new NotFoundException('Unauthorized');
+    }
 
-    return this.orderService.report(type, userRole, userId);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
+    return this.orderService.report(type, req.user.role, req.user.id);
   }
 
-  // =========================
   // HISTORY ALL
-  // =========================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'CASHIER')
   @Get('history/all')
@@ -57,9 +52,7 @@ export class OrderController {
     return this.orderService.history();
   }
 
-  // =========================
   // HISTORY DETAIL (HARUS DI ATAS /:id)
-  // =========================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'CASHIER')
   @Get('history/detail/:id')
@@ -67,28 +60,21 @@ export class OrderController {
     return this.orderService.historyDetail(id);
   }
 
-  // =========================
-  // GET ALL ORDER
-  // =========================
+  // GET ALL
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CASHIER', 'ADMIN')
+  @Roles('ADMIN', 'CASHIER')
   @Get()
   findAll(@Req() req) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-    const userId = req.user.id;
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-    const userRole = req.user.role;
-
-    if (userRole === 'ADMIN') {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    if (req.user.role === 'ADMIN') {
       return this.orderService.findAll();
     }
 
-    return this.orderService.findAll(userId);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
+    return this.orderService.findAll(req.user.id);
   }
 
-  // =========================
   // UPDATE STATUS
-  // =========================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('CASHIER')
   @Patch(':id/status')
@@ -99,9 +85,7 @@ export class OrderController {
     return this.orderService.updateStatus(id, dto.status);
   }
 
-  // =========================
   // UPDATE PAYMENT
-  // =========================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('CASHIER')
   @Patch(':id/payment')
@@ -112,9 +96,7 @@ export class OrderController {
     return this.orderService.updatePayment(id, body.paymentMethod, body.amount);
   }
 
-  // =========================
-  // DELETE ORDER
-  // =========================
+  // DELETE
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Delete(':id')
@@ -122,9 +104,7 @@ export class OrderController {
     return this.orderService.remove(id);
   }
 
-  // =========================
   // DELETE ALL
-  // =========================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Delete('all/clear')
@@ -132,11 +112,9 @@ export class OrderController {
     return this.orderService.removeAll();
   }
 
-  // =========================
-  // DETAIL ORDER (PALING BAWAH)
-  // =========================
+  // DETAIL ORDER
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CASHIER', 'ADMIN')
+  @Roles('ADMIN', 'CASHIER')
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.orderService.findOne(id);

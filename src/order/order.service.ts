@@ -33,7 +33,7 @@ export class OrderService {
       }),
     );
 
-    const total = menus.reduce((a, b) => a + b.subtotal, 0);
+    const total = menus.reduce((acc, item) => acc + item.subtotal, 0);
 
     const paymentMethodEnum =
       dto.paymentMethod === 'QRIS' ? PaymentMethod.QRIS : PaymentMethod.CASH;
@@ -51,9 +51,7 @@ export class OrderService {
         },
       },
       include: {
-        orderItems: {
-          include: { menu: true },
-        },
+        orderItems: { include: { menu: true } },
         cashier: true,
       },
     });
@@ -64,7 +62,7 @@ export class OrderService {
   // =========================
   async findAll(cashierId?: number) {
     return this.prisma.order.findMany({
-      where: cashierId ? { cashierId } : undefined,
+      where: cashierId ? { cashierId } : {},
       include: {
         orderItems: { include: { menu: true } },
         cashier: true,
@@ -74,7 +72,7 @@ export class OrderService {
   }
 
   // =========================
-  // GET DETAIL ORDER
+  // GET ONE ORDER
   // =========================
   async findOne(id: number) {
     const order = await this.prisma.order.findUnique({
@@ -133,9 +131,7 @@ export class OrderService {
 
     if (!order) throw new NotFoundException('Order tidak ditemukan');
 
-    await this.prisma.orderItem.deleteMany({
-      where: { orderId: id },
-    });
+    await this.prisma.orderItem.deleteMany({ where: { orderId: id } });
 
     return this.prisma.order.delete({ where: { id } });
   }
@@ -206,19 +202,18 @@ export class OrderService {
         throw new NotFoundException('Tipe report tidak valid');
     }
 
-    const where: any = {
-      createdAt: {
-        gte: startDate,
-      },
+    const where: {
+      createdAt: { gte: Date };
+      cashierId?: number;
+    } = {
+      createdAt: { gte: startDate },
     };
 
     if (userRole === 'CASHIER') {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       where.cashierId = userId;
     }
 
     const orders = await this.prisma.order.findMany({
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       where,
       include: {
         orderItems: { include: { menu: true } },
@@ -228,8 +223,7 @@ export class OrderService {
     });
 
     const totalOrders = orders.length;
-
-    const totalIncome = orders.reduce((sum, o) => sum + (o.total || 0), 0);
+    const totalIncome = orders.reduce((a, b) => a + b.total, 0);
 
     return {
       type,
@@ -241,14 +235,18 @@ export class OrderService {
         tableNumber: order.tableNumber,
         total: order.total,
         status: order.status,
-        paymentMethod: order.paymentMethod,
-        paymentStatus: order.paymentStatus,
-        cashier: order.cashier?.username || 'Sistem',
+
+        paymentMethod:
+          order.paymentMethod === PaymentMethod.CASH ? 'CASH' : 'QRIS',
+
+        paymentStatus:
+          order.paymentStatus === PaymentStatus.PAID ? 'PAID' : 'UNPAID',
+
+        cashier: order.cashier?.username ?? 'Sistem',
+
         date: order.createdAt.toLocaleDateString('id-ID'),
-        time: order.createdAt.toLocaleTimeString('id-ID', {
-          hour: '2-digit',
-          minute: '2-digit',
-        }),
+        time: order.createdAt.toLocaleTimeString('id-ID').replace(/\./g, ':'),
+
         items: order.orderItems.map((item) => ({
           menu: item.menu.name,
           qty: item.qty,
