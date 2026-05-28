@@ -98,38 +98,41 @@ export class OrderService {
   async report(type: string, role: string, userId: number) {
     try {
       const now = new Date();
+      let startDate = new Date();
+      let endDate = new Date();
 
-      // Set ke WIB (UTC+7)
-      const wibOffset = 7 * 60 * 60 * 1000;
-      const nowWIB = new Date(now.getTime() + wibOffset);
-
-      let startDateWIB = new Date(nowWIB);
-
+      // Tentukan range tanggal berdasarkan tipe laporan
       if (type === 'daily') {
-        startDateWIB.setHours(0, 0, 0, 0);
+        startDate.setHours(0, 0, 0, 0);
+        endDate.setHours(23, 59, 59, 999);
       } else if (type === 'weekly') {
-        const day = startDateWIB.getDay();
-        const diff = startDateWIB.getDate() - day + (day === 0 ? -6 : 1);
-        startDateWIB.setDate(diff);
-        startDateWIB.setHours(0, 0, 0, 0);
+        // Mulai dari hari Senin minggu ini
+        const day = startDate.getDay();
+        const diff = startDate.getDate() - day + (day === 0 ? -6 : 1);
+        startDate.setDate(diff);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(now);
+        endDate.setHours(23, 59, 59, 999);
       } else if (type === 'monthly') {
-        startDateWIB = new Date(nowWIB.getFullYear(), nowWIB.getMonth(), 1);
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        endDate.setHours(23, 59, 59, 999);
       } else if (type === 'yearly') {
-        startDateWIB = new Date(nowWIB.getFullYear(), 0, 1);
+        startDate = new Date(now.getFullYear(), 0, 1);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(now.getFullYear(), 11, 31);
+        endDate.setHours(23, 59, 59, 999);
       } else {
         throw new BadRequestException(
           'Tipe laporan tidak valid. Gunakan daily, weekly, monthly, atau yearly.',
         );
       }
 
-      const startDateUTC = new Date(startDateWIB.getTime() - wibOffset);
-      const endDateUTC = new Date(nowWIB.getTime() - wibOffset);
-      endDateUTC.setHours(23, 59, 59, 999);
-
       const whereClause: Prisma.OrderWhereInput = {
         createdAt: {
-          gte: startDateUTC,
-          lte: endDateUTC,
+          gte: startDate,
+          lte: endDate,
         },
       };
 
@@ -163,8 +166,27 @@ export class OrderService {
       );
 
       const formattedOrders = ordersRaw.map((order) => {
-        const dateUTC = new Date(order.createdAt);
-        const dateWIB = new Date(dateUTC.getTime() + wibOffset);
+        // Konversi ke WIB (UTC+7) untuk tampilan
+        const wibDate = new Date(
+          order.createdAt.getTime() + 7 * 60 * 60 * 1000,
+        );
+
+        // Format tanggal: 29/5/2026
+        const day = wibDate.getDate();
+        const month = wibDate.getMonth() + 1;
+        const year = wibDate.getFullYear();
+        const formattedDate = `${day}/${month}/${year}`;
+
+        // Format jam: 01.24 (24 format)
+        const hours = wibDate.getHours().toString().padStart(2, '0');
+        const minutes = wibDate.getMinutes().toString().padStart(2, '0');
+        const formattedTime = `${hours}.${minutes}`;
+
+        // Tentukan nama kasir
+        let cashierName = 'Menunggu Kasir';
+        if (order.cashier?.username) {
+          cashierName = order.cashier.username;
+        }
 
         return {
           id: order.id,
@@ -174,12 +196,9 @@ export class OrderService {
           status: order.status,
           paymentMethod: order.paymentMethod,
           paymentStatus: order.paymentStatus,
-          date: dateWIB.toLocaleDateString('id-ID'),
-          time: dateWIB.toLocaleTimeString('id-ID', {
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
-          cashier: order.cashier?.username || 'Public / QR',
+          date: formattedDate,
+          time: formattedTime,
+          cashier: cashierName,
           items: order.orderItems.map((item) => ({
             menu: item.menu?.name || 'Menu Dihapus',
             qty: item.qty,
