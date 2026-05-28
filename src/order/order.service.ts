@@ -17,12 +17,13 @@ export class OrderService {
   constructor(private readonly prisma: PrismaService) {}
 
   // ==========================================
-  // CREATE ORDER (FIXED)
+  // 1. CREATE ORDER
   // ==========================================
   async create(dto: CreateOrderDto, cashierId: number) {
     try {
       const assignedCashierId = cashierId === 0 ? null : cashierId;
 
+      // Type-safe destructuring menggunakan Prisma input types
       const { items, ...orderData } = dto as unknown as {
         customerName: string;
         tableNumber: string;
@@ -30,28 +31,26 @@ export class OrderService {
         status?: OrderStatus;
         paymentMethod?: PaymentMethod;
         paymentStatus?: PaymentStatus;
-        items: Array<{ menuId: number; qty: number; subtotal: number }>;
+        items?: Array<{ menuId: number; qty: number; subtotal: number }>;
       };
-
-      // ✅ VALIDASI WAJIB
-      if (!orderData.customerName || !orderData.tableNumber) {
-        throw new BadRequestException('Customer & table wajib diisi');
-      }
-
-      if (orderData.total === null || orderData.total === undefined) {
+      if (!orderData.total) {
         throw new BadRequestException('Total tidak boleh kosong');
       }
 
-      if (!Array.isArray(items) || items.length === 0) {
+      if (!items || items.length === 0) {
         throw new BadRequestException('Items tidak boleh kosong');
+      }
+
+      if (!orderData.total && orderData.total !== 0) {
+        throw new BadRequestException('Total tidak boleh kosong');
       }
 
       const newOrder = await this.prisma.order.create({
         data: {
-          customerName: orderData.customerName.trim(),
-          tableNumber: orderData.tableNumber.trim(),
+          customerName: orderData.customerName,
+          tableNumber: orderData.tableNumber,
           total: orderData.total,
-          status: orderData.status ?? OrderStatus.PENDING,
+          status: orderData.status,
           paymentMethod: orderData.paymentMethod ?? PaymentMethod.CASH,
           paymentStatus: orderData.paymentStatus ?? PaymentStatus.UNPAID,
           cashierId: assignedCashierId,
@@ -60,32 +59,21 @@ export class OrderService {
             create: items.map((item) => ({
               menuId: item.menuId,
               qty: item.qty,
-              subtotal: item.subtotal,
+              subtotal: item.subtotal ?? 0,
             })),
           },
         },
-        include: {
-          orderItems: true,
-        },
       });
 
-      return {
-        message: 'Order berhasil dibuat',
-        data: newOrder,
-      };
+      return { message: 'Order berhasil dibuat', data: newOrder };
     } catch (error) {
       console.error('CRASH CREATE ORDER:', error);
-
-      if (error instanceof BadRequestException) throw error;
-
-      throw new InternalServerErrorException(
-        'Terjadi kesalahan saat membuat order',
-      );
+      throw error;
     }
   }
 
   // ==========================================
-  // REPORT (UNCHANGED BUT SAFE)
+  // 2. REPORT (SINKRON DENGAN SCHEMA & FRONTEND)
   // ==========================================
   async report(type: string, role: string, userId: number) {
     try {
@@ -104,11 +92,17 @@ export class OrderService {
       } else if (type === 'yearly') {
         startDate = new Date(now.getFullYear(), 0, 1);
       } else {
-        throw new BadRequestException('Tipe laporan tidak valid');
+        throw new BadRequestException(
+          'Tipe laporan tidak valid. Gunakan daily, weekly, monthly, atau yearly.',
+        );
       }
 
+      // Filter menggunakan Prisma strictly-typed conditions
       const whereClause: Prisma.OrderWhereInput = {
-        createdAt: { gte: startDate, lte: now },
+        createdAt: {
+          gte: startDate,
+          lte: now,
+        },
       };
 
       if (role === 'CASHIER') {
@@ -118,54 +112,128 @@ export class OrderService {
       const ordersRaw = await this.prisma.order.findMany({
         where: whereClause,
         include: {
-          cashier: { select: { username: true } },
+          cashier: {
+            select: { username: true },
+          },
           orderItems: {
             include: {
-              menu: { select: { name: true } },
+              menu: {
+                select: { name: true },
+              },
             },
           },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
+
+      const totalOrders = ordersRaw.length;
+      const totalIncome = ordersRaw.reduce(
+        (sum, order) => sum + (order.total || 0),
+        0,
+      );
+
+      const formattedOrders = ordersRaw.map((order) => {
+        const dateObj = new Date(order.createdAt);
+
+        return {
+          id: order.id,
+          customerName: order.customerName,
+          tableNumber: order.tableNumber,
+          total: order.total,
+          status: order.status,
+          paymentMethod: order.paymentMethod,
+          paymentStatus: order.paymentStatus,
+          date: dateObj.toLocaleDateString('id-ID'),
+          time: dateObj.toLocaleTimeString('id-ID', {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+          cashier: order.cashier?.username || 'Public / QR',
+          items: order.orderItems.map((item) => ({
+            menu: item.menu?.name || 'Menu Dihapus',
+            qty: item.qty,
+            subtotal: item.subtotal,
+          })),
+        };
       });
 
       return {
         type,
-        totalOrders: ordersRaw.length,
-        totalIncome: ordersRaw.reduce((s, o) => s + (o.total ?? 0), 0),
-        orders: ordersRaw,
+        totalOrders,
+        totalIncome,
+        orders: formattedOrders,
       };
     } catch (error) {
-      console.error('ERROR REPORT:', error);
-      throw new InternalServerErrorException('Gagal ambil report');
+      console.error('ERROR DI ORDER SERVICE:', error);
+      throw new InternalServerErrorException(
+        error instanceof Error
+          ? error.message
+          : 'Terjadi kesalahan sistem saat memuat laporan',
+      );
     }
   }
 
   // ==========================================
-  // SIMPLE CRUD (UNCHANGED)
+  // 3. HISTORY ALL
   // ==========================================
-  findAll(cashierId?: number) {
+  async history() {
     return this.prisma.order.findMany({
-      where: cashierId ? { cashierId } : undefined,
-      include: { orderItems: { include: { menu: true } } },
+      include: {
+        cashier: { select: { username: true } },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
 
-  findOne(id: number) {
+  // ==========================================
+  // 4. HISTORY DETAIL
+  // ==========================================
+  async historyDetail(id: number) {
     return this.prisma.order.findUnique({
       where: { id },
+      include: {
+        cashier: { select: { username: true } },
+        orderItems: { include: { menu: true } },
+      },
+    });
+  }
+
+  // ==========================================
+  // 5. GET ALL ORDER
+  // ==========================================
+  async findAll(cashierId?: number) {
+    if (cashierId) {
+      return this.prisma.order.findMany({
+        where: { cashierId },
+        include: { orderItems: { include: { menu: true } } },
+      });
+    }
+    return this.prisma.order.findMany({
       include: { orderItems: { include: { menu: true } } },
     });
   }
 
-  updateStatus(id: number, status: OrderStatus) {
+  // ==========================================
+  // 6. UPDATE STATUS
+  // ==========================================
+  async updateStatus(id: number, status: OrderStatus) {
     return this.prisma.order.update({
       where: { id },
       data: { status },
     });
   }
 
-  async updatePayment(id: number, paymentMethod: PaymentMethod) {
+  // ==========================================
+  // 7. UPDATE PAYMENT
+  // ==========================================
+  async updatePayment(
+    id: number,
+    paymentMethod: PaymentMethod,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _amount: number,
+  ) {
     return this.prisma.order.update({
       where: { id },
       data: {
@@ -175,11 +243,27 @@ export class OrderService {
     });
   }
 
-  remove(id: number) {
+  // ==========================================
+  // 8. REMOVE SINGLE
+  // ==========================================
+  async remove(id: number) {
     return this.prisma.order.delete({ where: { id } });
   }
 
-  removeAll() {
+  // ==========================================
+  // 9. REMOVE ALL
+  // ==========================================
+  async removeAll() {
     return this.prisma.order.deleteMany();
+  }
+
+  // ==========================================
+  // 10. FIND ONE
+  // ==========================================
+  async findOne(id: number) {
+    return this.prisma.order.findUnique({
+      where: { id },
+      include: { orderItems: { include: { menu: true } } },
+    });
   }
 }
