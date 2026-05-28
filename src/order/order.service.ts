@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
+
 import { PaymentMethod, PaymentStatus } from '@prisma/client';
 
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -9,6 +10,9 @@ import { OrderStatus } from './dto/update-order-status.dto';
 export class OrderService {
   constructor(private prisma: PrismaService) {}
 
+  // =========================
+  // CREATE ORDER
+  // =========================
   async create(dto: CreateOrderDto, cashierId: number) {
     const menus = await Promise.all(
       dto.items.map(async (item) => {
@@ -32,14 +36,9 @@ export class OrderService {
       }),
     );
 
-    const total = menus.reduce(
-      (accumulator, currentValue) => accumulator + currentValue.subtotal,
-      0,
-    );
+    const total = menus.reduce((acc, item) => acc + item.subtotal, 0);
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const paymentMethodEnum =
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       dto.paymentMethod === 'QRIS' ? PaymentMethod.QRIS : PaymentMethod.CASH;
 
     return this.prisma.order.create({
@@ -47,11 +46,9 @@ export class OrderService {
         customerName: dto.customerName,
         tableNumber: dto.tableNumber,
         total,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         paymentMethod: paymentMethodEnum,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
         paymentStatus: PaymentStatus.UNPAID,
-        cashierId: cashierId,
+        cashierId,
         orderItems: {
           create: menus,
         },
@@ -67,6 +64,9 @@ export class OrderService {
     });
   }
 
+  // =========================
+  // GET ALL ORDER
+  // =========================
   async findAll(cashierId?: number) {
     const where = cashierId ? { cashierId } : {};
 
@@ -86,6 +86,9 @@ export class OrderService {
     });
   }
 
+  // =========================
+  // GET DETAIL ORDER
+  // =========================
   async findOne(id: number) {
     const order = await this.prisma.order.findUnique({
       where: { id },
@@ -106,6 +109,9 @@ export class OrderService {
     return order;
   }
 
+  // =========================
+  // UPDATE STATUS
+  // =========================
   async updateStatus(id: number, status: OrderStatus) {
     const order = await this.prisma.order.findUnique({
       where: { id },
@@ -117,10 +123,15 @@ export class OrderService {
 
     return this.prisma.order.update({
       where: { id },
-      data: { status },
+      data: {
+        status,
+      },
     });
   }
 
+  // =========================
+  // UPDATE PAYMENT
+  // =========================
   async updatePayment(id: number, paymentMethod: string, amount: number) {
     const order = await this.prisma.order.findUnique({
       where: { id },
@@ -130,23 +141,22 @@ export class OrderService {
       throw new NotFoundException('Order tidak ditemukan');
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const paymentMethodEnum =
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-      paymentMethod === 'CASH' ? PaymentMethod.CASH : PaymentMethod.QRIS;
+      paymentMethod === 'QRIS' ? PaymentMethod.QRIS : PaymentMethod.CASH;
 
     return this.prisma.order.update({
       where: { id },
       data: {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         paymentMethod: paymentMethodEnum,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
         paymentStatus: PaymentStatus.PAID,
         total: amount,
       },
     });
   }
 
+  // =========================
+  // DELETE ORDER
+  // =========================
   async remove(id: number) {
     const order = await this.prisma.order.findUnique({
       where: { id },
@@ -157,7 +167,9 @@ export class OrderService {
     }
 
     await this.prisma.orderItem.deleteMany({
-      where: { orderId: id },
+      where: {
+        orderId: id,
+      },
     });
 
     return this.prisma.order.delete({
@@ -165,11 +177,18 @@ export class OrderService {
     });
   }
 
+  // =========================
+  // DELETE ALL ORDER
+  // =========================
   async removeAll() {
     await this.prisma.orderItem.deleteMany();
+
     return this.prisma.order.deleteMany();
   }
 
+  // =========================
+  // HISTORY
+  // =========================
   async history() {
     return this.prisma.order.findMany({
       include: {
@@ -186,6 +205,9 @@ export class OrderService {
     });
   }
 
+  // =========================
+  // HISTORY DETAIL
+  // =========================
   async historyDetail(id: number) {
     const order = await this.prisma.order.findUnique({
       where: { id },
@@ -206,29 +228,34 @@ export class OrderService {
     return order;
   }
 
+  // =========================
+  // REPORT
+  // =========================
   async report(type: string, userRole: string, userId: number) {
-    const tz = 'Asia/Jakarta';
-    const nowString = new Date().toLocaleString('en-US', { timeZone: tz });
-    const now = new Date(nowString);
+    const now = new Date();
 
-    const startDate = new Date(nowString);
+    const startDate = new Date();
 
-    if (type === 'daily') {
-      startDate.setHours(0, 0, 0, 0);
-    } else if (type === 'weekly') {
-      startDate.setDate(now.getDate() - 7);
-    } else if (type === 'monthly') {
-      startDate.setMonth(now.getMonth() - 1);
-    } else if (type === 'yearly') {
-      startDate.setFullYear(now.getFullYear() - 1);
-    } else {
-      throw new NotFoundException('Tipe report tidak valid');
+    switch (type) {
+      case 'daily':
+        startDate.setHours(0, 0, 0, 0);
+        break;
+
+      case 'weekly':
+        startDate.setDate(now.getDate() - 7);
+        break;
+
+      case 'monthly':
+        startDate.setMonth(now.getMonth() - 1);
+        break;
+
+      case 'yearly':
+        startDate.setFullYear(now.getFullYear() - 1);
+        break;
+
+      default:
+        throw new NotFoundException('Tipe report tidak valid');
     }
-
-    const offset =
-      new Date().getTime() -
-      new Date(new Date().toLocaleString('en-US', { timeZone: tz })).getTime();
-    const targetUtcDate = new Date(startDate.getTime() + offset);
 
     const whereCondition: {
       createdAt: {
@@ -237,10 +264,11 @@ export class OrderService {
       cashierId?: number;
     } = {
       createdAt: {
-        gte: targetUtcDate,
+        gte: startDate,
       },
     };
 
+    // CASHIER hanya lihat miliknya
     if (userRole === 'CASHIER') {
       whereCondition.cashierId = userId;
     }
@@ -261,10 +289,8 @@ export class OrderService {
     });
 
     const totalOrders = orders.length;
-    const totalIncome = orders.reduce(
-      (accumulator, order) => accumulator + order.total,
-      0,
-    );
+
+    const totalIncome = orders.reduce((acc, order) => acc + order.total, 0);
 
     const formattedOrders = orders.map((order) => ({
       id: order.id,
@@ -272,23 +298,21 @@ export class OrderService {
       tableNumber: order.tableNumber,
       total: order.total,
       status: order.status,
+
       paymentMethod:
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         order.paymentMethod === PaymentMethod.CASH ? 'CASH' : 'QRIS',
+
       paymentStatus:
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         order.paymentStatus === PaymentStatus.PAID ? 'PAID' : 'UNPAID',
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+
       cashier: order.cashier?.username || 'Sistem',
-      date: order.createdAt.toLocaleDateString('id-ID', { timeZone: tz }),
-      time: order.createdAt
-        .toLocaleTimeString('id-ID', { timeZone: tz })
-        .replace(/\./g, ':'),
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+
+      date: order.createdAt.toLocaleDateString('id-ID'),
+
+      time: order.createdAt.toLocaleTimeString('id-ID').replace(/\./g, ':'),
+
       items: order.orderItems.map((item) => ({
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
         menu: item.menu.name,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
         qty: item.qty,
         subtotal: item.subtotal,
       })),

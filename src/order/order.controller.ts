@@ -24,39 +24,73 @@ import { Roles } from 'src/auth/decorator/roles.decorator';
 export class OrderController {
   constructor(private readonly orderService: OrderService) {}
 
-  // PUBLIC (customer tanpa login) - tetap bisa buat order
+  // PUBLIC (customer tanpa login)
   @Post()
   create(@Body() dto: CreateOrderDto) {
-    // Customer tidak perlu cashierId, nanti di kasir yang assign
-    return this.orderService.create(dto, 0); // 0 = belum assign kasir
+    return this.orderService.create(dto, 0);
   }
 
-  // CASHIER & ADMIN
+  // =========================
+  // REPORT
+  // =========================
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('CASHIER', 'ADMIN')
+  @Get('report/:type')
+  report(@Param('type') type: string, @Req() req) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
+    const userRole = req.user.role;
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
+    const userId = req.user.id;
+
+    return this.orderService.report(type, userRole, userId);
+  }
+
+  // =========================
+  // HISTORY PEMBELIAN
+  // =========================
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'CASHIER')
+  @Get('history/all')
+  history() {
+    return this.orderService.history();
+  }
+
+  // =========================
+  // DETAIL HISTORY
+  // =========================
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN', 'CASHIER')
+  @Get('history/:id')
+  historyDetail(@Param('id', ParseIntPipe) id: number) {
+    return this.orderService.historyDetail(id);
+  }
+
+  // =========================
+  // GET ALL ORDER
+  // =========================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('CASHIER', 'ADMIN')
   @Get()
   findAll(@Req() req) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
     const userId = req.user.id;
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
     const userRole = req.user.role;
 
-    // ADMIN bisa lihat semua order, CASHIER hanya lihat order miliknya
+    // ADMIN lihat semua
     if (userRole === 'ADMIN') {
       return this.orderService.findAll();
     }
+
+    // CASHIER lihat order miliknya
     return this.orderService.findAll(userId);
   }
 
-  // CASHIER & ADMIN
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CASHIER', 'ADMIN')
-  @Get(':id')
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.orderService.findOne(id);
-  }
-
-  // CASHIER ONLY - update status pesanan
+  // =========================
+  // UPDATE STATUS
+  // =========================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('CASHIER')
   @Patch(':id')
@@ -67,7 +101,9 @@ export class OrderController {
     return this.orderService.updateStatus(id, dto.status);
   }
 
-  // CASHIER ONLY - proses pembayaran
+  // =========================
+  // UPDATE PAYMENT
+  // =========================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('CASHIER')
   @Patch(':id/payment')
@@ -78,7 +114,9 @@ export class OrderController {
     return this.orderService.updatePayment(id, body.paymentMethod, body.amount);
   }
 
-  // ADMIN ONLY - HAPUS ORDER
+  // =========================
+  // DELETE ORDER
+  // =========================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Delete(':id')
@@ -86,7 +124,9 @@ export class OrderController {
     return this.orderService.remove(id);
   }
 
-  // ADMIN ONLY - HAPUS SEMUA ORDER
+  // =========================
+  // DELETE ALL ORDER
+  // =========================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
   @Delete('all/clear')
@@ -94,31 +134,14 @@ export class OrderController {
     return this.orderService.removeAll();
   }
 
-  // HISTORY PEMBELIAN
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'CASHIER')
-  @Get('history/all')
-  history() {
-    return this.orderService.history();
-  }
-
-  // DETAIL HISTORY
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN', 'CASHIER')
-  @Get('history/:id')
-  historyDetail(@Param('id', ParseIntPipe) id: number) {
-    return this.orderService.historyDetail(id);
-  }
-
-  // REPORT
+  // =========================
+  // DETAIL ORDER
+  // TARUH PALING BAWAH
+  // =========================
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('CASHIER', 'ADMIN')
-  @Get('report/:type')
-  report(@Param('type') type: string, @Req() req) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-    const userRole = req.user.role;
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-    const userId = req.user.id;
-    return this.orderService.report(type, userRole, userId);
+  @Get(':id')
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.orderService.findOne(id);
   }
 }
