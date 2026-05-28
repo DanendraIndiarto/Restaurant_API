@@ -23,7 +23,6 @@ export class OrderService {
     try {
       const assignedCashierId = cashierId === 0 ? null : cashierId;
 
-      // Validasi
       if (!dto.total && dto.total !== 0) {
         throw new BadRequestException('Total tidak boleh kosong');
       }
@@ -32,13 +31,29 @@ export class OrderService {
         throw new BadRequestException('Items tidak boleh kosong');
       }
 
-      // Siapkan data items dengan tipe yang jelas
-      const orderItemsData = dto.items.map((item) => ({
-        menuId: item.menuId,
-        qty: item.qty,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        subtotal: item.subtotal,
-      }));
+      // Ambil harga menu dari database
+      const menuIds = dto.items.map((item) => item.menuId);
+      const menus = await this.prisma.menu.findMany({
+        where: { id: { in: menuIds } },
+        select: { id: true, price: true },
+      });
+
+      const menuPriceMap = new Map(menus.map((m) => [m.id, m.price]));
+
+      // Hitung subtotal otomatis
+      const orderItemsData = dto.items.map((item) => {
+        const price = menuPriceMap.get(item.menuId);
+        if (!price) {
+          throw new BadRequestException(
+            `Menu dengan ID ${item.menuId} tidak ditemukan`,
+          );
+        }
+        return {
+          menuId: item.menuId,
+          qty: item.qty,
+          subtotal: price * item.qty, // hitung otomatis, tidak perlu dari frontend
+        };
+      });
 
       const newOrder = await this.prisma.order.create({
         data: {
