@@ -238,13 +238,25 @@ export class OrderService {
   // ==========================================
   async findAll(cashierId?: number) {
     if (cashierId) {
+      // Kasir: lihat order miliknya ATAU order dari user (cashierId = null)
       return this.prisma.order.findMany({
-        where: { cashierId },
-        include: { orderItems: { include: { menu: true } } },
+        where: {
+          OR: [{ cashierId: cashierId }, { cashierId: null }],
+        },
+        include: {
+          orderItems: {
+            include: { menu: true },
+          },
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
       });
     }
+    // Admin: lihat semua order
     return this.prisma.order.findMany({
       include: { orderItems: { include: { menu: true } } },
+      orderBy: { createdAt: 'desc' },
     });
   }
 
