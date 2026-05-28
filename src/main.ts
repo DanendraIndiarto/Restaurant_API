@@ -2,21 +2,25 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
-import { join } from 'path'; // <--- Tambahkan import ini
-import { NestExpressApplication } from '@nestjs/platform-express'; // <--- Tambahkan import ini
+import { join } from 'path';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { json, urlencoded } from 'express'; // <--- 1. TAMBAHKAN IMPORT METODE INI
 
 async function bootstrap() {
-  // Ubah baris ini agar mendukung Express Application
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   app.enableCors();
 
-  // --- TAMBAHKAN BARIS INI ---
-  // Ini gunanya agar folder 'uploads' bisa diakses lewat URL /uploads
+  // --- 2. TAMBAHKAN DUA BARIS LIMIT INI UNTUK MENGATASI ERROR 413 ---
+  // Menaikkan batas ukuran request body JSON dan URL-encoded hingga 10MB
+  app.use(json({ limit: '10mb' }));
+  app.use(urlencoded({ limit: '10mb', extended: true }));
+  // -----------------------------------------------------------------
+
+  // Folder 'uploads' agar bisa diakses lewat URL /uploads
   app.useStaticAssets(join(process.cwd(), 'uploads'), {
     prefix: '/uploads/',
   });
-  // ---------------------------
 
   app.useGlobalPipes(
     new ValidationPipe({
