@@ -62,7 +62,7 @@ export class OrderService {
       return { message: 'Order berhasil dibuat', data: newOrder };
     } catch (error) {
       console.error('CRASH CREATE ORDER:', error);
-      throw new InternalServerErrorException('Gagal membuat order');
+      throw error;
     }
   }
 
