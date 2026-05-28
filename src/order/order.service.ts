@@ -1,231 +1,126 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from 'src/prisma/prisma.service';
-import { PaymentMethod, PaymentStatus } from '@prisma/client';
-
+import {
+  Injectable,
+  BadRequestException,
+  InternalServerErrorException,
+} from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service'; // Sesuaikan path jika folder prisma kamu berbeda
 import { CreateOrderDto } from './dto/create-order.dto';
-import { OrderStatus } from './dto/update-order-status.dto';
+import { PaymentStatus } from '@prisma/client';
 
 @Injectable()
 export class OrderService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
-  // =========================
-  // CREATE ORDER
-  // =========================
+  // ==========================================
+  // 1. CREATE ORDER
+  // ==========================================
   async create(dto: CreateOrderDto, cashierId: number) {
-    const menus = await Promise.all(
-      dto.items.map(async (item) => {
-        const menu = await this.prisma.menu.findUnique({
-          where: { id: item.menuId },
-        });
+    try {
+      // Menangani jika order dibuat oleh pelanggan langsung (cashierId = 0)
+      const assignedCashierId = cashierId === 0 ? null : cashierId;
 
-        if (!menu) {
-          throw new NotFoundException(
-            `Menu dengan id ${item.menuId} tidak ditemukan`,
-          );
-        }
+      // Destrukturisasi dto untuk memisahkan data order utama dan array items
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      const { items, ...orderData } = dto as any;
 
-        return {
-          menuId: item.menuId,
-          qty: item.qty,
-          subtotal: menu.price * item.qty,
-        };
-      }),
-    );
-
-    const total = menus.reduce((acc, item) => acc + item.subtotal, 0);
-
-    return this.prisma.order.create({
-      data: {
-        customerName: dto.customerName,
-        tableNumber: dto.tableNumber,
-        total,
-        paymentMethod:
-          dto.paymentMethod === 'QRIS'
-            ? PaymentMethod.QRIS
-            : PaymentMethod.CASH,
-        paymentStatus: PaymentStatus.UNPAID,
-        cashierId,
-        orderItems: {
-          create: menus,
+      const newOrder = await this.prisma.order.create({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        data: {
+          ...orderData,
+          cashierId: assignedCashierId,
+          orderItems: {
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+            create: items?.map((item: any) => ({
+              // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+              menuId: item.menuId,
+              // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+              qty: item.qty,
+              // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+              subtotal: item.subtotal,
+            })),
+          },
         },
-      },
-      include: {
-        orderItems: { include: { menu: true } },
-        cashier: true,
-      },
-    });
-  }
+        include: {
+          orderItems: true,
+        },
+      });
 
-  // =========================
-  // GET ALL ORDER
-  // =========================
-  async findAll(cashierId?: number) {
-    return this.prisma.order.findMany({
-      where: cashierId ? { cashierId } : {},
-      include: {
-        orderItems: { include: { menu: true } },
-        cashier: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-  }
-
-  // =========================
-  // GET ONE ORDER
-  // =========================
-  async findOne(id: number) {
-    const order = await this.prisma.order.findUnique({
-      where: { id },
-      include: {
-        orderItems: { include: { menu: true } },
-        cashier: true,
-      },
-    });
-
-    if (!order) throw new NotFoundException('Order tidak ditemukan');
-
-    return order;
-  }
-
-  // =========================
-  // UPDATE STATUS
-  // =========================
-  async updateStatus(id: number, status: OrderStatus) {
-    const order = await this.prisma.order.findUnique({ where: { id } });
-
-    if (!order) throw new NotFoundException('Order tidak ditemukan');
-
-    return this.prisma.order.update({
-      where: { id },
-      data: { status },
-    });
-  }
-
-  // =========================
-  // UPDATE PAYMENT
-  // =========================
-  async updatePayment(id: number, paymentMethod: string, amount: number) {
-    const order = await this.prisma.order.findUnique({ where: { id } });
-
-    if (!order) throw new NotFoundException('Order tidak ditemukan');
-
-    return this.prisma.order.update({
-      where: { id },
-      data: {
-        paymentMethod:
-          paymentMethod === 'QRIS' ? PaymentMethod.QRIS : PaymentMethod.CASH,
-        paymentStatus: PaymentStatus.PAID,
-        total: amount,
-      },
-    });
-  }
-
-  // =========================
-  // DELETE ORDER
-  // =========================
-  async remove(id: number) {
-    const order = await this.prisma.order.findUnique({ where: { id } });
-
-    if (!order) throw new NotFoundException('Order tidak ditemukan');
-
-    await this.prisma.orderItem.deleteMany({
-      where: { orderId: id },
-    });
-
-    return this.prisma.order.delete({ where: { id } });
-  }
-
-  // =========================
-  // DELETE ALL ORDER
-  // =========================
-  async removeAll() {
-    await this.prisma.orderItem.deleteMany();
-    return this.prisma.order.deleteMany();
-  }
-
-  // =========================
-  // HISTORY
-  // =========================
-  async history() {
-    return this.prisma.order.findMany({
-      include: {
-        orderItems: { include: { menu: true } },
-        cashier: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-  }
-
-  // =========================
-  // HISTORY DETAIL
-  // =========================
-  async historyDetail(id: number) {
-    const order = await this.prisma.order.findUnique({
-      where: { id },
-      include: {
-        orderItems: { include: { menu: true } },
-        cashier: true,
-      },
-    });
-
-    if (!order) throw new NotFoundException('History tidak ditemukan');
-
-    return order;
-  }
-
-  // =========================
-  // REPORT (FIXED + CASHIER FILTER)
-  // =========================
-  async report(type: string, userRole: string, userId: number) {
-    const now = new Date();
-    const startDate = new Date();
-
-    if (type === 'daily') {
-      startDate.setHours(0, 0, 0, 0);
-    } else if (type === 'weekly') {
-      startDate.setDate(now.getDate() - 7);
-    } else if (type === 'monthly') {
-      startDate.setMonth(now.getMonth() - 1);
-    } else if (type === 'yearly') {
-      startDate.setFullYear(now.getFullYear() - 1);
-    } else {
-      throw new NotFoundException('Tipe report tidak valid');
+      return { message: 'Order berhasil dibuat', data: newOrder };
+    } catch (error) {
+      console.error('CRASH CREATE ORDER:', error);
+      throw new InternalServerErrorException('Gagal membuat order');
     }
+  }
 
-    const where: {
-      createdAt: { gte: Date };
-      cashierId?: number;
-    } = {
-      createdAt: { gte: startDate },
-    };
+  // ==========================================
+  // 2. REPORT (SINKRON DENGAN SCHEMA & FRONTEND)
+  // ==========================================
+  async report(type: string, role: string, userId: number) {
+    try {
+      const now = new Date();
+      let startDate = new Date();
 
-    // 🔥 INI PENTING: laporan per kasir
-    if (userRole === 'CASHIER') {
-      where.cashierId = userId;
-    }
+      if (type === 'daily') {
+        startDate.setHours(0, 0, 0, 0);
+      } else if (type === 'weekly') {
+        const day = startDate.getDay();
+        const diff = startDate.getDate() - day + (day === 0 ? -6 : 1);
+        startDate.setDate(diff);
+        startDate.setHours(0, 0, 0, 0);
+      } else if (type === 'monthly') {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      } else if (type === 'yearly') {
+        startDate = new Date(now.getFullYear(), 0, 1);
+      } else {
+        throw new BadRequestException(
+          'Tipe laporan tidak valid. Gunakan daily, weekly, monthly, atau yearly.',
+        );
+      }
 
-    const orders = await this.prisma.order.findMany({
-      where,
-      include: {
-        orderItems: { include: { menu: true } },
-        cashier: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+      // Filter berdasarkan range tanggal
+      const whereClause: any = {
+        createdAt: {
+          gte: startDate,
+          lte: now,
+        },
+      };
 
-    const totalOrders = orders.length;
+      // Jika yang login CASHIER, batasi hanya melihat transaksi miliknya
+      if (role === 'CASHIER') {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        whereClause.cashierId = userId;
+      }
 
-    const totalIncome = orders.reduce((sum, order) => {
-      return sum + (order.total || 0);
-    }, 0);
+      // Ambil data sesuai relasi nyata di schema.prisma kamu
+      const ordersRaw = await this.prisma.order.findMany({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        where: whereClause,
+        include: {
+          cashier: {
+            select: { username: true }, // Model User menggunakan properti 'username'
+          },
+          orderItems: {
+            include: {
+              menu: {
+                select: { name: true }, // Mengambil nama menu dari model Menu
+              },
+            },
+          },
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+      });
 
-    return {
-      type,
-      totalOrders,
-      totalIncome,
-      orders: orders.map((order) => {
-        const createdAt = order.createdAt;
+      const totalOrders = ordersRaw.length;
+      const totalIncome = ordersRaw.reduce(
+        (sum, order) => sum + (order.total || 0),
+        0,
+      );
+
+      // Normalisasi data agar dibaca mulus oleh halaman page.tsx Next.js kamu
+      const formattedOrders = ordersRaw.map((order) => {
+        const dateObj = new Date(order.createdAt);
 
         return {
           id: order.id,
@@ -233,29 +128,126 @@ export class OrderService {
           tableNumber: order.tableNumber,
           total: order.total,
           status: order.status,
-
-          paymentMethod:
-            order.paymentMethod === PaymentMethod.CASH ? 'CASH' : 'QRIS',
-
-          paymentStatus:
-            order.paymentStatus === PaymentStatus.PAID ? 'PAID' : 'UNPAID',
-
-          cashier: order.cashier?.username ?? 'Sistem',
-
-          date: createdAt.toLocaleDateString('id-ID'),
-
-          time: createdAt.toLocaleTimeString('id-ID', {
+          paymentMethod: order.paymentMethod,
+          paymentStatus: order.paymentStatus,
+          date: dateObj.toLocaleDateString('id-ID'),
+          time: dateObj.toLocaleTimeString('id-ID', {
             hour: '2-digit',
             minute: '2-digit',
           }),
-
+          cashier: order.cashier?.username || 'Public / QR',
           items: order.orderItems.map((item) => ({
-            menu: item.menu?.name ?? 'Menu',
+            menu: item.menu?.name || 'Menu Dihapus',
             qty: item.qty,
             subtotal: item.subtotal,
           })),
         };
-      }),
-    };
+      });
+
+      return {
+        type,
+        totalOrders,
+        totalIncome,
+        orders: formattedOrders,
+      };
+    } catch (error) {
+      console.error('ERROR DI ORDER SERVICE:', error);
+      throw new InternalServerErrorException(
+        error instanceof Error
+          ? error.message
+          : 'Terjadi kesalahan sistem saat memuat laporan',
+      );
+    }
+  }
+
+  // ==========================================
+  // 3. HISTORY ALL
+  // ==========================================
+  async history() {
+    return this.prisma.order.findMany({
+      include: {
+        cashier: { select: { username: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // ==========================================
+  // 4. HISTORY DETAIL
+  // ==========================================
+  async historyDetail(id: number) {
+    return this.prisma.order.findUnique({
+      where: { id },
+      include: {
+        cashier: { select: { username: true } },
+        orderItems: { include: { menu: true } },
+      },
+    });
+  }
+
+  // ==========================================
+  // 5. GET ALL ORDER (DENGAN FILTER SINKRON KASIR)
+  // ==========================================
+  async findAll(cashierId?: number) {
+    if (cashierId) {
+      return this.prisma.order.findMany({
+        where: { cashierId },
+        include: { orderItems: { include: { menu: true } } },
+      });
+    }
+    return this.prisma.order.findMany({
+      include: { orderItems: { include: { menu: true } } },
+    });
+  }
+
+  // ==========================================
+  // 6. UPDATE STATUS
+  // ==========================================
+  async updateStatus(id: number, status: any) {
+    return this.prisma.order.update({
+      where: { id },
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      data: { status },
+    });
+  }
+
+  // ==========================================
+  // 7. UPDATE PAYMENT
+  // ==========================================
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  async updatePayment(id: number, paymentMethod: any, _amount: number) {
+    // Logika opsional tambahan: bandingkan field 'amount' uang masuk dengan total belanja di sini jika perlu
+    return this.prisma.order.update({
+      where: { id },
+      data: {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        paymentMethod,
+        paymentStatus: PaymentStatus.PAID, // Menggunakan enum PAID asli dari schema.prisma
+      },
+    });
+  }
+
+  // ==========================================
+  // 8. REMOVE SINGLE
+  // ==========================================
+  async remove(id: number) {
+    return this.prisma.order.delete({ where: { id } });
+  }
+
+  // ==========================================
+  // 9. REMOVE ALL
+  // ==========================================
+  async removeAll() {
+    return this.prisma.order.deleteMany();
+  }
+
+  // ==========================================
+  // 10. FIND ONE
+  // ==========================================
+  async findOne(id: number) {
+    return this.prisma.order.findUnique({
+      where: { id },
+      include: { orderItems: { include: { menu: true } } },
+    });
   }
 }

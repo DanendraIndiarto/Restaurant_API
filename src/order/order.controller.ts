@@ -9,7 +9,7 @@ import {
   Post,
   UseGuards,
   Req,
-  NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 
 import { OrderService } from './order.service';
@@ -20,6 +20,14 @@ import { JwtAuthGuard } from 'src/auth/guard/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guard/roles.guard';
 import { Roles } from 'src/auth/decorator/roles.decorator';
 
+interface RequestWithUser extends Request {
+  user?: {
+    id: number;
+    username: string;
+    role: 'ADMIN' | 'CASHIER';
+  };
+}
+
 @Controller('order')
 export class OrderController {
   constructor(private readonly orderService: OrderService) {}
@@ -29,7 +37,6 @@ export class OrderController {
   // =========================
   @Post()
   create(@Body() dto: CreateOrderDto) {
-    // cashierId = 0 untuk public order
     return this.orderService.create(dto, 0);
   }
 
@@ -39,16 +46,15 @@ export class OrderController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'CASHIER')
   @Get('report/:type')
-  report(@Param('type') type: string, @Req() req: any) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+  report(@Param('type') type: string, @Req() req: RequestWithUser) {
     const user = req.user;
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     if (!user?.id) {
-      throw new NotFoundException('Unauthorized');
+      throw new UnauthorizedException(
+        'Anda belum login atau token tidak valid',
+      );
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
     return this.orderService.report(type, user.role, user.id);
   }
 
@@ -78,23 +84,17 @@ export class OrderController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'CASHIER')
   @Get()
-  findAll(@Req() req: any) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+  findAll(@Req() req: RequestWithUser) {
     const user = req.user;
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     if (!user?.id) {
-      throw new NotFoundException('Unauthorized');
+      throw new UnauthorizedException('Anda belum login');
     }
 
-    // ADMIN lihat semua
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     if (user.role === 'ADMIN') {
       return this.orderService.findAll();
     }
 
-    // CASHIER hanya order dia
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
     return this.orderService.findAll(user.id);
   }
 
@@ -119,7 +119,7 @@ export class OrderController {
   @Patch(':id/payment')
   updatePayment(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { paymentMethod: string; amount: number },
+    @Body() body: { paymentMethod: any; amount: number },
   ) {
     return this.orderService.updatePayment(id, body.paymentMethod, body.amount);
   }
