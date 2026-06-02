@@ -54,7 +54,7 @@ model Order {
 
   orderItems OrderItem[]
   
-  @@map("orders")  // ← tambah ini saja
+  @@map("orders")
 }
 
 model OrderItem {

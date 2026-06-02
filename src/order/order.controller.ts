@@ -121,6 +121,7 @@ export class OrderController {
     @Param('id', ParseIntPipe) id: number,
     @Body() body: { paymentMethod: any; amount: number },
   ) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
     return this.orderService.updatePayment(id, body.paymentMethod, body.amount);
   }
 

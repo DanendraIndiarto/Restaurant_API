@@ -11,13 +11,14 @@ import {
   PaymentMethod,
   Prisma,
 } from '@prisma/client';
+import * as QRCode from 'qrcode'; // <-- Import library QR Code
 
 @Injectable()
 export class OrderService {
   constructor(private readonly prisma: PrismaService) {}
 
   // ==========================================
-  // 1. CREATE ORDER - FIXED (NO ESLINT ERRORS)
+  // 1. CREATE ORDER - WITH LOCAL QR CODE BASE64
   // ==========================================
   async create(dto: CreateOrderDto, cashierId: number) {
     try {
@@ -55,6 +56,7 @@ export class OrderService {
         };
       });
 
+      // Simpan data order ke database
       const newOrder = await this.prisma.order.create({
         data: {
           customerName: dto.customerName,
@@ -72,7 +74,28 @@ export class OrderService {
         },
       });
 
-      return { message: 'Order berhasil dibuat', data: newOrder };
+      // --- LOGIKA GENERATE QR CODE LOCAL ---
+      let qrUrl: string | null = null;
+
+      if (newOrder.paymentMethod === 'QRIS') {
+        // Data payload teks yang akan dimasukkan ke dalam QR Code
+        const qrPayload = `SAVORY_ORDER_${newOrder.id}_TOTAL_${newOrder.total}`;
+
+        // Generate teks payload menjadi gambar berformat Base64 DataURI
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+        qrUrl = await QRCode.toDataURL(qrPayload, {
+          errorCorrectionLevel: 'H', // Tingkat koreksi eror tinggi supaya mudah di-scan
+          margin: 2, // Ketebalan border putih di sekitar QR
+          width: 300, // Resolusi lebar gambar QR (300x300px)
+        });
+      }
+
+      // Return response sukses beserta properti qrUrl ke frontend
+      return {
+        message: 'Order berhasil dibuat',
+        data: newOrder,
+        qrUrl: qrUrl,
+      };
     } catch (error) {
       console.error('CRASH CREATE ORDER:', error);
 

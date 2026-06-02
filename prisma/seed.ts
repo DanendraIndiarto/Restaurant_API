@@ -27,7 +27,7 @@ async function main() {
         role: Role.ADMIN,
       },
     });
-    console.log(`✅ Admin berhasil dibuat: ${username}`);
+    console.log(`Admin berhasil dibuat: ${username}`);
   } else {
     // 4. Opsional: Update password jika admin sudah ada (agar sinkron dengan keinginan baru Anda)
     await prisma.user.update({
@@ -35,15 +35,15 @@ async function main() {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       data: { password: hashedPassword },
     });
-    console.log(`ℹ️ Admin ${username} sudah ada, password telah diperbarui.`);
+    console.log(`Admin ${username} sudah ada, password telah diperbarui.`);
   }
 
-  console.log('🚀 Seeder selesai.');
+  console.log('Seeder selesai.');
 }
 
 main()
   .catch((e) => {
-    console.error('❌ Error seeder:', e);
+    console.error('Error seeder:', e);
     process.exit(1);
   })
   .finally(async () => {
